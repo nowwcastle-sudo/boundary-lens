@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "path_relation": {
+    "logical_within_workspace": true,
+    "reparse_segment_observed": true,
+    "final_workspace_observed": true,
+    "final_path_observed": null,
+    "final_within_workspace": null
+  },
+  "collection_failures": [
+    {
+      "code": "REPARSE_TARGET_UNRESOLVED",
+      "message": "The synthetic reparse target could not be resolved.",
+      "evidence_refs": ["reparse_target"],
+      "next_observation": "Observe the final failed-path target before classifying containment."
+    }
+  ],
+  "unknowns": [
+    {
+      "code": "FINAL_PATH_UNKNOWN",
+      "message": "The synthetic final failed-path identity was not observed.",
+      "evidence_refs": ["path_relation.final_path_observed"],
+      "next_observation": "Observe the final failed-path identity before classifying containment."
+    },
+    {
+      "code": "FINAL_CONTAINMENT_UNKNOWN",
+      "message": "Final containment could not be established without both final identities.",
+      "evidence_refs": ["path_relation.final_within_workspace"],
+      "next_observation": "Observe both final identities before comparing the final boundary."
+    },
+    {
+      "code": "RUNTIME_ENFORCEMENT_UNKNOWN",
+      "message": "Static path evidence does not establish runtime enforcement.",
+      "evidence_refs": ["runtime_enforcement"],
+      "next_observation": "Collect an authorized runtime observation for the affected process."
+    }
+  ],
+  "expected_codes": [
+    "REPARSE_TARGET_UNRESOLVED",
+    "FINAL_PATH_UNKNOWN",
+    "FINAL_CONTAINMENT_UNKNOWN",
+    "RUNTIME_ENFORCEMENT_UNKNOWN"
+  ]
+}

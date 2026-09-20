@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "path_relation": {
+    "logical_within_workspace": true,
+    "reparse_segment_observed": true,
+    "final_workspace_observed": true,
+    "final_path_observed": true,
+    "final_within_workspace": true
+  },
+  "collection_failures": [],
+  "unknowns": [],
+  "expected_codes": []
+}

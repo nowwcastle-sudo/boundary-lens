@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check PowerShell 7
+        shell: pwsh
+        run: |
+          $version = pwsh --version
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^PowerShell 7\.') { throw 'PowerShell 7 is required.' }
+          Write-Output $version
+      - name: Run all read-only and regression suites
+        shell: pwsh
+        run: |
+          $suites = @('repro.ps1','interface.ps1','read-only.ps1','final-review-regressions.ps1','residual-correctness.ps1','psdrive-backing.ps1','local-final-chain.ps1','evidence-references.ps1','documentation-contract.ps1','operational-ux.ps1','repository-privacy.ps1')
+          foreach ($suite in $suites) {
+            pwsh -NoProfile -File (Join-Path 'tests' $suite)
+            if ($LASTEXITCODE -ne 0) { throw "Test suite failed: $suite" }
+          }
+      - name: Verify native handle replacement and cleanup
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/native-collector.ps1 -Group race
+          if ($LASTEXITCODE -ne 0) { throw 'Native handle replacement and cleanup checks failed.' }
+      - name: Verify native review regressions
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/native-review-regressions.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native review regressions failed.' }
+      - name: Verify documented report handoff
+        shell: pwsh
+        run: |
+          $reportHandoffCheck = Join-Path ([IO.Path]::GetTempPath()) ('boundary-report-handoff-ci-' + [guid]::NewGuid().ToString('N'))
+          pwsh -NoProfile -NonInteractive -File tests/report-handoff.ps1 -OutputDirectory $reportHandoffCheck
+          $reportHandoffExit = $LASTEXITCODE
+          if ($reportHandoffExit -ne 0) { throw 'Documented report handoff verification failed.' }
+      - name: Build and verify a fresh package
+        shell: pwsh
+        run: |
+          $releaseCheck = Join-Path ([IO.Path]::GetTempPath()) ('boundary-lens-package-ci-' + [guid]::NewGuid().ToString('N'))
+          pwsh -NoProfile -File tests/package.ps1 -OutputDirectory $releaseCheck
+          if ($LASTEXITCODE -ne 0) { throw 'Package verification failed.' }
+          $zip = Join-Path $releaseCheck 'boundary-lens-0.2.0-experimental.1.zip'
+          $members = @(tar -tf $zip | Sort-Object)
+          $tarExit = $LASTEXITCODE
+          if ($tarExit -ne 0 -or ($members -join ',') -cne 'BoundaryLens.ps1,LICENSE,README.md,SHA256SUMS.txt') { throw 'ZIP member allowlist differs.' }
+          pwsh -NoProfile -File tests/operational-ux.ps1 -ScriptPath (Join-Path $releaseCheck 'BoundaryLens.ps1')
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone process UX verification failed.' }
+          $extracted = Join-Path $releaseCheck 'extracted-test-copy'
+          Expand-Archive -LiteralPath $zip -DestinationPath $extracted -ErrorAction Stop
+          $expectedExtractedMembers = @('BoundaryLens.ps1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
+          $actualExtractedMembers = @(Get-ChildItem -LiteralPath $extracted -File | ForEach-Object Name | Sort-Object)
+          if (($actualExtractedMembers -join ',') -cne (($expectedExtractedMembers | Sort-Object) -join ',')) {
+            throw 'ZIP extraction produced an incomplete or unexpected member set.'
+          }
+          pwsh -NoProfile -File tests/operational-ux.ps1 -ScriptPath (Join-Path $extracted 'BoundaryLens.ps1')
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP process UX verification failed.' }
