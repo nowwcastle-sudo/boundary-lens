@@ -65,7 +65,7 @@ function Convert-IncidentElement([System.Text.Json.JsonElement]$Element, [ref]$N
 }
 
 function ConvertFrom-IncidentJson {
-    param([Parameter(Mandatory)][byte[]]$Bytes)
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
     try {
         $utf8 = [Text.UTF8Encoding]::new($false, $true)
         $value = $utf8.GetString($Bytes)
@@ -172,6 +172,8 @@ function Assert-IncidentFailure($Failure) {
 
 function Assert-IncidentCorePath([hashtable]$Record) {
     Assert-IncidentShape $Record @('probe','status','raw_input','lexical_path','exists','final_path','reparse_segments','observations','failure')
+    Assert-IncidentValue $Record['probe'] string
+    Assert-IncidentValue $Record['status'] string
     if ($Record['probe'] -cne 'path' -or $Record['status'] -cnotin @('observed','unknown','collection-failure')) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
     Assert-IncidentValue $Record['raw_input'] string
     foreach ($key in @('lexical_path','final_path')) { Assert-IncidentValue $Record[$key] string $true }
@@ -188,6 +190,8 @@ function Assert-IncidentCorePath([hashtable]$Record) {
     $obs = $Record['observations']
     Assert-IncidentValue $obs map
     Assert-IncidentShape $obs @('role','provider','existing_segment_count','nearest_existing_path','reparse_observation_complete')
+    Assert-IncidentValue $obs['role'] string
+    Assert-IncidentValue $obs['provider'] string
     if ($obs['role'] -cnotin @('workspace','failed-path') -or $obs['provider'] -cne 'FileSystem') { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
     Assert-IncidentValue $obs['existing_segment_count'] integer
     Assert-IncidentValue $obs['nearest_existing_path'] string $true
@@ -197,6 +201,7 @@ function Assert-IncidentCorePath([hashtable]$Record) {
 
 function Assert-IncidentCoreAcl([hashtable]$Record) {
     Assert-IncidentShape $Record @('probe','status','raw_input','role','protected','owner_fingerprint','access_rules','failure')
+    foreach ($key in @('probe','status','role')) { Assert-IncidentValue $Record[$key] string }
     if ($Record['probe'] -cne 'acl' -or $Record['status'] -cnotin @('observed','unknown','collection-failure') -or
         $Record['role'] -cnotin @('workspace','failed-path')) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
     Assert-IncidentValue $Record['raw_input'] string
@@ -206,6 +211,7 @@ function Assert-IncidentCoreAcl([hashtable]$Record) {
     foreach ($rule in $Record['access_rules']) {
         Assert-IncidentValue $rule map
         Assert-IncidentShape $rule @('access_type','rights','inherited','identity_fingerprint')
+        Assert-IncidentValue $rule['access_type'] string
         if ($rule['access_type'] -cnotin @('allow','deny')) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
         foreach ($key in @('rights','identity_fingerprint')) { Assert-IncidentValue $rule[$key] string }
         Assert-IncidentValue $rule['inherited'] boolean
@@ -229,6 +235,7 @@ function Read-IncidentContext {
     $data = ConvertFrom-IncidentJson -Bytes (Read-IncidentFile -LiteralPath $LiteralPath -MaxBytes 1048576)
     if ($data -isnot [hashtable]) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
     Assert-IncidentKeys $data @('schema','product','version','error_code','occurred_at','runtime_uri','process_id','supplied_observations')
+    Assert-IncidentValue $data['schema'] string
     if ($data['schema'] -cne 'boundary-incident/1') { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
     foreach ($key in @('product','version','error_code','occurred_at','runtime_uri')) {
         if ($data.ContainsKey($key) -and ($data[$key] -isnot [string] -or $data[$key].Length -eq 0)) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
@@ -240,6 +247,7 @@ function Read-IncidentContext {
         foreach ($entry in $data['supplied_observations']) {
             if ($entry -isnot [hashtable]) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
             Assert-IncidentKeys $entry @('kind','value','observed_at')
+            Assert-IncidentValue $entry['kind'] string
             if ($entry.Count -ne 3 -or $entry['kind'] -cnotin @('filter','runtime') -or $entry['value'] -isnot [string] -or $entry['value'].Length -eq 0) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
             Assert-IncidentUtc $entry['observed_at'] $true
         }
@@ -255,6 +263,7 @@ function Read-IncidentCoreReport {
     if ($data.Count -ne 4 -or $data['schema_version'] -isnot [long] -or $data['schema_version'] -ne 1 -or
         $data['incident'] -isnot [hashtable] -or $data['evidence'] -isnot [hashtable] -or $data['results'] -isnot [array]) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
     Assert-IncidentKeys $data['incident'] @('workspace_input','failed_path_input','runtime_kind','observed_at')
+    Assert-IncidentValue $data['incident']['runtime_kind'] string
     if ($data['incident'].Count -ne 4 -or $data['incident']['runtime_kind'] -cne 'windows-local') { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
     foreach ($key in @('workspace_input','failed_path_input')) { if ($data['incident'][$key] -isnot [string]) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') } }
     Assert-IncidentUtc $data['incident']['observed_at'] $false $true
@@ -271,6 +280,7 @@ function Read-IncidentCoreReport {
     foreach ($item in $data['results']) {
         if ($item -isnot [hashtable]) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }
         Assert-IncidentKeys $item @('status','code','message','evidence_refs','next_observation')
+        Assert-IncidentValue $item['status'] string
         if ($item.Count -ne 5 -or $item['status'] -cnotin @('unknown','collection-failure','cause-candidate') -or
             $item['code'] -isnot [string] -or $item['message'] -isnot [string] -or $item['next_observation'] -isnot [string] -or
             $item['evidence_refs'] -isnot [array]) { throw (New-IncidentError 'INCIDENT_SCHEMA_INVALID') }

@@ -30,6 +30,8 @@ $atLimit = ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes('{"va
 Check ($atLimit['value'].Length -eq 4096) 'Exact string limit rejected.'
 try { ConvertFrom-IncidentJson -Bytes ([byte[]]@(123,34,120,34,58,34,255,34,125)) | Out-Null; throw 'Invalid UTF-8 accepted.' }
 catch { Check ($_.Exception.Message -eq 'INCIDENT_JSON_INVALID') 'Wrong UTF-8 failure.' }
+try { ConvertFrom-IncidentJson -Bytes ([byte[]]@()) | Out-Null; throw 'Empty JSON bytes accepted.' }
+catch { Check ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -eq 'INCIDENT_JSON_INVALID') 'Empty JSON did not return fixed InvalidDataException.' }
 
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('boundary-incident-input-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($fixture) | Out-Null
@@ -46,6 +48,14 @@ foreach ($bad in @('{"schema":"boundary-incident/1","status":"SAFE"}', '{"schema
     try { Read-IncidentContext -LiteralPath $incident | Out-Null; throw 'Invalid context accepted.' }
     catch { Check ($_.Exception.Message -eq 'INCIDENT_SCHEMA_INVALID') 'Wrong context failure.' }
 }
+foreach ($bad in @('{"schema":[]}', '{"schema":["boundary-incident/1"]}', '{"schema":true}', '{"schema":"boundary-incident/1","supplied_observations":[{"kind":[],"value":"x","observed_at":null}]}')) {
+    [IO.File]::WriteAllText($incident,$bad)
+    try { Read-IncidentContext -LiteralPath $incident | Out-Null; throw 'Nonscalar incident field accepted.' }
+    catch { Check ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -eq 'INCIDENT_SCHEMA_INVALID') 'Wrong nonscalar incident failure.' }
+}
+[IO.File]::WriteAllBytes($incident, [byte[]]@())
+try { Read-IncidentContext -LiteralPath $incident | Out-Null; throw 'Empty incident file accepted.' }
+catch { Check ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -eq 'INCIDENT_JSON_INVALID') 'Wrong empty incident failure.' }
 [IO.File]::WriteAllText($incident,$good)
 [IO.File]::WriteAllBytes($log,[Text.Encoding]::UTF8.GetBytes('{"error_code":"E1","message":"PRIVATE","component":"c"}' + "`n"))
 $logs = @(Read-IncidentLogs -LiteralPath @($log))
@@ -53,6 +63,10 @@ Check ($logs.Count -eq 1 -and $logs[0].error_code -eq 'E1' -and -not $logs[0].Co
 [IO.File]::WriteAllText($log, "{}`nnot-json")
 try { Read-IncidentLogs -LiteralPath @($log) | Out-Null; throw 'Malformed log batch accepted.' }
 catch { Check ($_.Exception.Message -eq 'INCIDENT_LOG_INVALID') 'Wrong malformed batch failure.' }
+$emptyJsonLog = Join-Path $fixture 'empty.json'
+[IO.File]::WriteAllBytes($emptyJsonLog, [byte[]]@())
+try { Read-IncidentLogs -LiteralPath @($emptyJsonLog) | Out-Null; throw 'Empty JSON log accepted.' }
+catch { Check ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -eq 'INCIDENT_LOG_INVALID') 'Wrong empty JSON log failure.' }
 [IO.File]::WriteAllText($log, ('{}' + "`n") * 10000)
 Check (@(Read-IncidentLogs -LiteralPath @($log)).Count -eq 10000) 'Exact record bound rejected.'
 [IO.File]::AppendAllText($log, '{}')
@@ -85,7 +99,35 @@ $coreHash = (Get-FileHash -LiteralPath $corePath -Algorithm SHA256).Hash
 $core = @(Read-IncidentCoreReport -LiteralPath $corePath)
 Check ($core.Count -eq 1 -and $core[0].schema_version -eq 1 -and @($core[0].results | Where-Object code -eq 'RUNTIME_ENFORCEMENT_UNKNOWN').Count -eq 1) 'Actual core report rejected or output spilled.'
 Check ((Get-FileHash -LiteralPath $corePath -Algorithm SHA256).Hash -eq $coreHash) 'Core input changed.'
-$spoof = $coreJson | ConvertFrom-Json -AsHashtable
+foreach ($case in @(
+    @{ section='incident'; record=''; field='runtime_kind'; value=@() },
+    @{ section='evidence'; record='workspace_path'; field='probe'; value=@() },
+    @{ section='evidence'; record='workspace_path'; field='status'; value=@() },
+    @{ section='evidence'; record='workspace_path'; field='observations.provider'; value=@() },
+    @{ section='evidence'; record='workspace_acl'; field='probe'; value=@() },
+    @{ section='evidence'; record='workspace_acl'; field='role'; value=@() },
+    @{ section='results'; record='0'; field='status'; value=@() }
+)) {
+    $badCore = ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes($coreJson))
+    if ($case.section -eq 'incident') { $badCore['incident'][$case.field] = $case.value }
+    elseif ($case.section -eq 'results') { $badCore['results'][0][$case.field] = $case.value }
+    elseif ($case.field -eq 'observations.provider') { $badCore['evidence'][$case.record]['observations']['provider'] = $case.value }
+    else { $badCore['evidence'][$case.record][$case.field] = $case.value }
+    [IO.File]::WriteAllText($corePath,($badCore | ConvertTo-Json -Depth 32))
+    try { Read-IncidentCoreReport -LiteralPath $corePath | Out-Null; throw "Nonscalar core $($case.field) accepted." }
+    catch { Check ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -eq 'INCIDENT_SCHEMA_INVALID') "Wrong nonscalar core $($case.field) failure." }
+}
+[IO.File]::WriteAllBytes($corePath, [byte[]]@())
+try { Read-IncidentCoreReport -LiteralPath $corePath | Out-Null; throw 'Empty core file accepted.' }
+catch { Check ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -eq 'INCIDENT_JSON_INVALID') 'Wrong empty core failure.' }
+$unknownCore = ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes($coreJson))
+$unknownCore['evidence']['failed_path']['status'] = 'unknown'
+$unknownCore['evidence']['failed_path']['exists'] = $null
+$unknownCore['evidence']['path_relation']['final_within_workspace'] = $null
+[IO.File]::WriteAllText($corePath,($unknownCore | ConvertTo-Json -Depth 32))
+$unknownRead = Read-IncidentCoreReport -LiteralPath $corePath
+Check ($unknownRead['evidence']['failed_path']['status'] -eq 'unknown') 'Valid unknown/null core was rejected.'
+$spoof = ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes($coreJson))
 $spoof['evidence']['workspace_path']['observations']['unsafe'] = 'SAFE'
 [IO.File]::WriteAllText($corePath,($spoof | ConvertTo-Json -Depth 32))
 try { Read-IncidentCoreReport -LiteralPath $corePath | Out-Null; throw 'Nested extra core field accepted.' }
