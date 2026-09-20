@@ -8,12 +8,22 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 public static class BoundaryHandoffPath {
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr templateFile);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
     static extern uint GetFinalPathNameByHandleW(SafeFileHandle handle, StringBuilder path, uint length, uint flags);
-    public static string Final(SafeFileHandle handle) {
+    static string Final(SafeFileHandle handle, uint flags) {
         var path = new StringBuilder(32768);
-        uint count = GetFinalPathNameByHandleW(handle, path, (uint)path.Capacity, 0);
+        uint count = GetFinalPathNameByHandleW(handle, path, (uint)path.Capacity, flags);
         if (count == 0 || count >= path.Capacity) throw new System.IO.IOException("Output identity unavailable.");
         return path.ToString();
+    }
+    public static string Final(SafeFileHandle handle) { return Final(handle, 0); }
+    public static string NtFinal(SafeFileHandle handle) { return Final(handle, 2); }
+    public static string DirectoryNtFinal(string path) {
+        using (var handle = CreateFileW(path, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero)) {
+            if (handle.IsInvalid) throw new System.IO.IOException("Directory identity unavailable.");
+            return NtFinal(handle);
+        }
     }
 }
 '@ -ErrorAction Stop
@@ -98,12 +108,111 @@ function New-IncidentHandoff {
     return @{core_summary=@{schema_version=$(if ($CoreReport.schema_version -eq 1) {1} else {$null});runtime_kind='windows-local';path_labels=@('workspace','failed-target');evidence=$coreEvidence.ToArray();results=$results.ToArray()};incident_context=$incident;observations=$minimized.ToArray();handoff_summary=@{status=$(if ($unavailable -gt 0) {'incomplete'} else {'complete'});unavailable_observation_count=$unavailable;runtime_enforcement='RUNTIME_ENFORCEMENT_UNKNOWN';next_observation='Review local original core report and unavailable evidence; runtime enforcement remains unknown.'}}
 }
 
+function Get-HandoffHtmlCell($Value) {
+    if ($null -eq $Value) { return 'unavailable' }
+    $printable=if ($Value -is [hashtable] -or $Value -is [array]) { $Value | ConvertTo-Json -Depth 16 -Compress } else { [string]$Value }
+    return [Net.WebUtility]::HtmlEncode($printable)
+}
+function Add-HandoffHtmlRow([Text.StringBuilder]$Builder,[object[]]$Cells) {
+    [void]$Builder.Append('<tr>')
+    foreach ($cell in $Cells) {
+        [void]$Builder.Append('<td>')
+        [void]$Builder.Append((Get-HandoffHtmlCell $cell))
+        [void]$Builder.Append('</td>')
+    }
+    [void]$Builder.Append('</tr>')
+}
 function ConvertTo-IncidentHtml {
     param([Parameter(Mandatory)][hashtable]$Handoff)
-    $json = $Handoff | ConvertTo-Json -Depth 32
-    $encoded = [Net.WebUtility]::HtmlEncode($json)
-    return '<!doctype html><html lang="en"><meta charset="utf-8"><title>Boundary Lens incident handoff</title><style>body{font:16px system-ui;max-width:72rem;margin:2rem auto;padding:0 1rem;color:#17212b}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f2f5f7;padding:1rem}h1{font-size:1.5rem}</style><h1>Minimized incident handoff</h1><p>Supplied, observed, and unavailable evidence remain distinct. Runtime enforcement is unknown.</p><pre>' + $encoded + '</pre></html>'
+    $html=[Text.StringBuilder]::new()
+    [void]$html.Append('<!doctype html><html lang="en"><meta charset="utf-8"><title>Boundary Lens incident handoff</title><style>body{font:16px system-ui;max-width:72rem;margin:2rem auto;padding:0 1rem;color:#17212b}table{width:100%;border-collapse:collapse;margin:0 0 1.5rem}th,td{border:1px solid #cbd5dc;padding:.5rem;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eef2f5}caption{text-align:left;font-weight:700;margin:.5rem 0}</style><h1>Minimized incident handoff</h1><p>Evidence is labelled by source and availability. Runtime enforcement remains unknown.</p>')
+    [void]$html.Append('<table><caption>Core summary</caption><thead><tr><th scope="col">Path</th><th scope="col">Probe</th><th scope="col">Status</th><th scope="col">Error</th></tr></thead><tbody>')
+    foreach ($row in @($Handoff.core_summary.evidence)) { Add-HandoffHtmlRow $html @($row.path,$row.probe,$row.status,$row.error_code) }
+    [void]$html.Append('</tbody></table><table><caption>Incident context</caption><thead><tr><th scope="col">Field</th><th scope="col">Minimized value</th></tr></thead><tbody>')
+    foreach ($key in @('occurred_at','product','version','error_code','runtime_uri_present','process_selected','supplied_observation_count')) { Add-HandoffHtmlRow $html @($key,$Handoff.incident_context[$key]) }
+    [void]$html.Append('</tbody></table><table><caption>Observations</caption><thead><tr><th scope="col">Kind</th><th scope="col">Provenance</th><th scope="col">Status</th><th scope="col">Value</th><th scope="col">Error</th></tr></thead><tbody>')
+    foreach ($row in @($Handoff.observations)) { Add-HandoffHtmlRow $html @($row.kind,$row.provenance,$row.status,$row.value,$row.error_code) }
+    [void]$html.Append('</tbody></table><table><caption>Handoff summary</caption><thead><tr><th scope="col">Status</th><th scope="col">Unavailable observations</th><th scope="col">Runtime enforcement</th><th scope="col">Next observation</th></tr></thead><tbody>')
+    Add-HandoffHtmlRow $html @($Handoff.handoff_summary.status,$Handoff.handoff_summary.unavailable_observation_count,$Handoff.handoff_summary.runtime_enforcement,$Handoff.handoff_summary.next_observation)
+    [void]$html.Append('</tbody></table></html>')
+    return $html.ToString()
 }
+
+function Resolve-HandoffPhysicalPath([string]$Path,[bool]$RequireDirectory) {
+    try {
+        if ($Path -cnotmatch '^[A-Za-z]:\\' -or $Path.Substring(2).Contains(':') -or $Path -match '[\\/](\.|\.\.)[\\/]' -or $Path -match '[\\/]\.\.?$') { throw 'path' }
+        $pending=[IO.Path]::GetFullPath($Path)
+        $links=0
+        while ($true) {
+            if ($links -gt 16) { throw 'link budget' }
+            $root=[IO.Path]::GetPathRoot($pending)
+            if ($root -cnotmatch '^[A-Za-z]:\\$' -or [IO.DriveInfo]::new($root).DriveType -notin @([IO.DriveType]::Fixed,[IO.DriveType]::Removable)) { throw 'drive' }
+            $parts=@($pending.Substring($root.Length).Split([char[]]@('\','/'),[StringSplitOptions]::RemoveEmptyEntries))
+            if ($parts.Count -gt 256) { throw 'component budget' }
+            $current=$root
+            $restarted=$false
+            for ($i=0;$i -lt $parts.Count;$i++) {
+                $next=[IO.Path]::Combine($current,$parts[$i])
+                try { $attributes=[IO.File]::GetAttributes($next) }
+                catch [IO.FileNotFoundException] { $attributes=$null }
+                catch [IO.DirectoryNotFoundException] { $attributes=$null }
+                if ($null -eq $attributes) {
+                    if ($RequireDirectory) { throw 'missing boundary' }
+                    $tail=($parts[$i..($parts.Count-1)] -join '\')
+                    $base=[BoundaryHandoffPath]::DirectoryNtFinal($current)
+                    if ($base -notmatch '^\\Device\\HarddiskVolume[0-9]+(?:\\|$)') { throw 'nonlocal boundary' }
+                    return ($base.TrimEnd([char]'\') + '\' + $tail)
+                }
+                if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    if (($attributes -band [IO.FileAttributes]::Directory) -eq 0) { throw 'unsupported reparse' }
+                    $target=[IO.DirectoryInfo]::new($next).LinkTarget
+                    if ($target -cnotmatch '^[A-Za-z]:\\' -or $target.Substring(2).Contains(':') -or $target -match '[\\/](\.|\.\.)[\\/]' -or $target -match '[\\/]\.\.?$') { throw 'unverified link' }
+                    $tail=if ($i+1 -lt $parts.Count) { $parts[($i+1)..($parts.Count-1)] -join '\' } else { '' }
+                    $pending=if ($tail.Length -gt 0) { [IO.Path]::GetFullPath([IO.Path]::Combine($target,$tail)) } else { [IO.Path]::GetFullPath($target) }
+                    $links++
+                    $restarted=$true
+                    break
+                }
+                if ($i -lt $parts.Count-1 -and ($attributes -band [IO.FileAttributes]::Directory) -eq 0) { throw 'nondirectory ancestor' }
+                $current=$next
+            }
+            if ($restarted) { continue }
+            $last=[IO.File]::GetAttributes($current)
+            if (($last -band [IO.FileAttributes]::Directory) -eq 0) {
+                if ($RequireDirectory) { throw 'not directory' }
+                $base=[BoundaryHandoffPath]::DirectoryNtFinal([IO.Path]::GetDirectoryName($current))
+                $physical=$base.TrimEnd([char]'\') + '\' + [IO.Path]::GetFileName($current)
+            }
+            else { $physical=[BoundaryHandoffPath]::DirectoryNtFinal($current) }
+            if ($physical -notmatch '^\\Device\\HarddiskVolume[0-9]+(?:\\|$)') { throw 'nonlocal boundary' }
+            return $physical.TrimEnd([char]'\')
+        }
+    }
+    catch { throw [IO.InvalidDataException]::new('INCIDENT_OUTPUT_INVALID') }
+}
+
+function Test-HandoffWithin([string]$Candidate,[string]$Boundary) {
+    return [string]::Equals($Candidate,$Boundary,[StringComparison]::OrdinalIgnoreCase) -or
+        $Candidate.StartsWith($Boundary.TrimEnd([char]'\') + '\',[StringComparison]::OrdinalIgnoreCase)
+}
+function Assert-HandoffPhysicalBoundary([string]$Output,[string[]]$InvestigatedPaths) {
+    $parent=[IO.Path]::GetDirectoryName($Output)
+    $physicalParent=Resolve-HandoffPhysicalPath $parent $true
+    $candidate=$physicalParent.TrimEnd([char]'\') + '\' + [IO.Path]::GetFileName($Output)
+    for ($index=0;$index -lt $InvestigatedPaths.Count;$index++) {
+        $investigated=$InvestigatedPaths[$index]
+        if ($investigated -match '^\\Device\\') {
+            if ($investigated -notmatch '^\\Device\\HarddiskVolume[0-9]+(?:\\[^\\:]+)*$' -or
+                $investigated -match '[\\/]\.\.?([\\/]|$)') { throw [IO.InvalidDataException]::new('INCIDENT_OUTPUT_INVALID') }
+            $boundary=$investigated.TrimEnd([char]'\')
+        }
+        else { $boundary=Resolve-HandoffPhysicalPath $investigated ($index -eq 0) }
+        if (Test-HandoffWithin $candidate $boundary) { throw [IO.InvalidDataException]::new('INCIDENT_OUTPUT_INVALID') }
+    }
+    return $candidate
+}
+
+function Write-HandoffBytes([IO.FileStream]$Stream,[byte[]]$Bytes) { $Stream.Write($Bytes,0,$Bytes.Length) }
 
 function Get-HandoffLocalPath([string]$Path, [bool]$MustExist) {
     try {
@@ -132,6 +241,9 @@ function Write-IncidentHandoff {
     param([Parameter(Mandatory)][string]$LiteralPath,[Parameter(Mandatory)][AllowEmptyString()][string]$Payload,
         [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$InputPaths,
         [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$InvestigatedPaths)
+    if ($InvestigatedPaths.Count -eq 0 -or $InvestigatedPaths[0] -cnotmatch '^[A-Za-z]:\\') {
+        throw [IO.InvalidDataException]::new('INCIDENT_OUTPUT_INVALID')
+    }
     $bytes = [Text.UTF8Encoding]::new($false,$true).GetBytes($Payload)
     $output = Get-HandoffLocalPath $LiteralPath $false
     foreach ($input in $InputPaths) {
@@ -140,20 +252,25 @@ function Write-IncidentHandoff {
     }
     foreach ($investigated in $InvestigatedPaths) {
         try {
+            if ($investigated -match '^\\Device\\') { continue }
             if ($investigated -cnotmatch '^[A-Za-z]:\\' -or $investigated.Substring(2).Contains(':')) { throw 'path' }
             $boundary = [IO.Path]::GetFullPath($investigated).TrimEnd([char]'\',[char]'/')
             if ([string]::Equals($output,$boundary,[StringComparison]::OrdinalIgnoreCase) -or $output.StartsWith($boundary + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'inside' }
         }
         catch { throw [IO.InvalidDataException]::new('INCIDENT_OUTPUT_INVALID') }
     }
+    $physicalCandidate=Assert-HandoffPhysicalBoundary $output $InvestigatedPaths
     $output = Get-HandoffLocalPath $output $false
+    $physicalCandidate=Assert-HandoffPhysicalBoundary $output $InvestigatedPaths
     $stream = $null
     try {
         $stream = [IO.FileStream]::new($output,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
         $final = [BoundaryHandoffPath]::Final($stream.SafeFileHandle)
         if ($final.StartsWith('\\?\',[StringComparison]::Ordinal)) { $final = $final.Substring(4) }
         if (-not [string]::Equals($final,$output,[StringComparison]::OrdinalIgnoreCase)) { throw 'identity' }
-        $stream.Write($bytes,0,$bytes.Length)
+        $finalNt=[BoundaryHandoffPath]::NtFinal($stream.SafeFileHandle)
+        if (-not [string]::Equals($finalNt,$physicalCandidate,[StringComparison]::OrdinalIgnoreCase)) { throw 'physical identity' }
+        Write-HandoffBytes $stream $bytes
         $stream.Flush($true)
     }
     catch { throw [IO.IOException]::new('INCIDENT_OUTPUT_FAILED') }

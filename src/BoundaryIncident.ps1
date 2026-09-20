@@ -37,12 +37,20 @@ try {
     $handoff=New-IncidentHandoff -CoreReport $core -Context $context -Observations $observations
     $payload=if ($options.format -ceq 'Html') { ConvertTo-IncidentHtml -Handoff $handoff } else { $handoff | ConvertTo-Json -Depth 32 -Compress }
     $inputPaths=@($options.core,$options.incident)+$logs.ToArray()
-    Write-IncidentHandoff -LiteralPath $options.output -Payload $payload -InputPaths $inputPaths -InvestigatedPaths @($core.incident.workspace_input,$core.incident.failed_path_input)
+    $boundaries=[Collections.Generic.List[string]]::new()
+    $boundaries.Add($core.incident.workspace_input)
+    $boundaries.Add($core.incident.failed_path_input)
+    foreach ($key in @('workspace_path','failed_path')) {
+        $savedFinal=$core.evidence[$key].final_path
+        if ($null -ne $savedFinal) { $boundaries.Add($savedFinal) }
+    }
+    Write-IncidentHandoff -LiteralPath $options.output -Payload $payload -InputPaths $inputPaths -InvestigatedPaths $boundaries.ToArray()
     if ($handoff.handoff_summary.status -eq 'incomplete') { Stop-Incident 'INCIDENT_HANDOFF_INCOMPLETE' 1 }
     exit 0
 }
 catch {
     $code=$_.Exception.Message
     if ($code -in @('INCIDENT_JSON_INVALID','INCIDENT_SCHEMA_INVALID','INCIDENT_PATH_INVALID','INCIDENT_FILE_INVALID','INCIDENT_LOG_INVALID','INCIDENT_OUTPUT_INVALID')) { Stop-Incident $code 2 }
+    if ($code -eq 'INCIDENT_FILE_IO_FAILED') { Stop-Incident $code 1 }
     Stop-Incident 'INCIDENT_EXPORT_FAILED' 1
 }

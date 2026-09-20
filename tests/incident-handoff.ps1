@@ -27,6 +27,11 @@ Check (-not $json.Contains('core_report')) 'Raw core was exported.'
 Check ($json.Contains('RUNTIME_ENFORCEMENT_UNKNOWN')) 'Runtime unknown was lost.'
 foreach ($secret in $sensitive) { Check (-not $json.Contains($secret)) 'Sensitive JSON string leaked.'; Check (-not $html.Contains($secret)) 'Sensitive HTML string leaked.' }
 Check ($html -notmatch '<script|<iframe|<img|<link|<form') 'Active or remote HTML resource.'
+Check (($html -split '<table').Count -ge 4) 'HTML lacks separate readable tables.'
+$poisoned=$handoff.Clone()
+$poisoned['observations']=@(@{kind='log';provenance='operator-supplied';status='supplied';value='<script>alert(1)</script>';error_code=$null})
+$encodedHtml=ConvertTo-IncidentHtml -Handoff $poisoned
+Check ($encodedHtml.Contains('&lt;script&gt;alert(1)&lt;/script&gt;') -and -not $encodedHtml.Contains('<script>alert(1)</script>')) 'HTML observation cell was not encoded.'
 Check ($handoff.incident_context.product -eq 'product-1') 'Product was not aliased.'
 Check ($handoff.observations[0].value.label -eq 'selected-process') 'Process identity leaked.'
 Check ($html.Contains('operator-supplied')) 'Supplied provenance missing in HTML.'
@@ -61,4 +66,24 @@ $unknown=New-IncidentHandoff -CoreReport $unknownCore -Context @{schema='boundar
 Check ($unknown.core_summary.evidence[0].status -eq 'unknown') 'Missing core observation became observed.'
 $forged=New-IncidentHandoff -CoreReport $core -Context @{schema='boundary-incident/1'} -Observations @(@{kind='filter';provenance='operator-supplied';status='observed';value='SAFE';observed_at=$null;error_code=$null})
 Check ($forged.observations[0].status -eq 'supplied' -and $forged.observations[0].provenance -eq 'operator-supplied') 'Forged supplied observation became measured.'
+$privateScheme=New-IncidentHandoff -CoreReport $core -Context @{schema='boundary-incident/1'} -Observations @(@{kind='runtime-uri';provenance='operator-supplied';status='supplied';value=@{scheme='secretmarker';representation='remote';relationship='unknown'};observed_at=$null;error_code=$null})
+Check ($privateScheme.observations[0].value.scheme -eq 'other' -and -not (($privateScheme | ConvertTo-Json -Depth 32).Contains('secretmarker'))) 'User-controlled URI scheme escaped the public allowlist.'
+$failureOutput=Join-Path ([IO.Path]::GetTempPath()) ('boundary-handoff-partial-' + [guid]::NewGuid().ToString('N') + '.json')
+$module=Get-Module IncidentHandoff
+& $module {
+    function script:Write-HandoffBytes([IO.FileStream]$Stream,[byte[]]$Bytes) {
+        $Stream.Write([byte[]]@(65),0,1)
+        throw [IO.IOException]::new('synthetic write failure')
+    }
+}
+try { Write-IncidentHandoff -LiteralPath $failureOutput -Payload $json -InputPaths @($file) -InvestigatedPaths @($root); throw 'Injected write failure was ignored.' }
+catch { Check ($_.Exception.Message -eq 'INCIDENT_OUTPUT_FAILED') 'Post-open write failure lacked fixed error.' }
+Check ([IO.File]::Exists($failureOutput) -and [IO.File]::ReadAllText($failureOutput) -eq 'A') 'Failed partial artifact was not retained.'
+$unknownWorkspace=Join-Path ([IO.Path]::GetTempPath()) ('boundary-unverified-workspace-' + [guid]::NewGuid().ToString('N'))
+$unknownOutput=Join-Path ([IO.Path]::GetTempPath()) ('boundary-unverified-output-' + [guid]::NewGuid().ToString('N') + '.json')
+try { Write-IncidentHandoff -LiteralPath $unknownOutput -Payload $json -InputPaths @($file) -InvestigatedPaths @($unknownWorkspace); throw 'Unverified workspace accepted.' }
+catch { Check ($_.Exception.Message -eq 'INCIDENT_OUTPUT_INVALID' -and -not [IO.File]::Exists($unknownOutput)) 'Unverified workspace did not fail closed before create.' }
+$emptyBoundaryOutput=Join-Path ([IO.Path]::GetTempPath()) ('boundary-empty-boundary-' + [guid]::NewGuid().ToString('N') + '.json')
+try { Write-IncidentHandoff -LiteralPath $emptyBoundaryOutput -Payload $json -InputPaths @($file) -InvestigatedPaths @(); throw 'Empty investigated boundary accepted.' }
+catch { Check ($_.Exception.Message -eq 'INCIDENT_OUTPUT_INVALID' -and -not [IO.File]::Exists($emptyBoundaryOutput)) 'Empty boundary did not fail closed before create.' }
 Write-Output "incident-handoff assertions=$checks"

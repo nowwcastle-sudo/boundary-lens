@@ -1,5 +1,31 @@
 # Local incident companion (source-build candidate)
 
+## Physical output boundary and failure classification
+
+The writer checks both the declared paths and their current local physical
+targets before creating an output. It inspects supported local directory-link
+targets before following them and rejects unknown or remote targets. A missing
+failed target is allowed only when its nearest existing parent can be verified;
+the missing suffix remains part of the excluded boundary. Known NT physical
+paths saved in the core report are additional exclusions, not authenticated
+proof of current identity or report origin. If the real workspace boundary
+cannot be established, companion export is unavailable with
+INCIDENT_OUTPUT_INVALID and exit 2. The original core report remains usable
+and its UNKNOWN evidence is unchanged. This fail-closed choice can prevent a
+handoff for some incomplete core reports.
+
+A locked or unreadable valid input returns fixed INCIDENT_FILE_IO_FAILED and
+exit 1. Invalid paths, schemas and resource limits remain exit 2. A failure
+after a fresh output file is opened retains the partial artifact. Physical
+checks are repeated before creation and the opened output path is checked
+before bytes are written; privileged namespace replacement between these
+steps is outside the guarantee.
+
+HTML has separate core-summary, incident-context, observation and handoff
+tables. The provenance and status columns distinguish measured, supplied and
+unavailable rows. Every variable cell is HTML-encoded; the page has no script,
+form, external asset or automatic request.
+
 The companion consumes an explicitly saved `BoundaryLens.ps1 -Format Json` report. It does not run the original collector, another product, a URI request, or a repair. Keep the full core report and incident input locally. The published `v0.2.0-experimental.1` ZIP is unchanged and does not contain this companion.
 
 Run these lines in PowerShell 7 from a source-build candidate directory containing all five runtime files. `$existingReport` must be a full saved core JSON report produced by the original diagnostic. `$boundaryOutput` must be a separate local directory outside the investigated paths.

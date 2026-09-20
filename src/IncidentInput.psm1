@@ -137,7 +137,10 @@ function Read-IncidentFile {
         }
         finally { $stream.Dispose() }
     }
-    catch { throw (New-IncidentError 'INCIDENT_FILE_INVALID') }
+    catch {
+        if ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -eq 'INCIDENT_FILE_INVALID') { throw }
+        throw (New-IncidentError 'INCIDENT_FILE_IO_FAILED')
+    }
 }
 
 function Assert-IncidentKeys([hashtable]$Map, [string[]]$Allowed) {

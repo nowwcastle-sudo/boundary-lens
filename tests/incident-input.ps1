@@ -60,6 +60,11 @@ catch { Check ($_.Exception -is [IO.InvalidDataException] -and $_.Exception.Mess
 [IO.File]::WriteAllBytes($log,[Text.Encoding]::UTF8.GetBytes('{"error_code":"E1","message":"PRIVATE","component":"c"}' + "`n"))
 $logs = @(Read-IncidentLogs -LiteralPath @($log))
 Check ($logs.Count -eq 1 -and $logs[0].error_code -eq 'E1' -and -not $logs[0].ContainsKey('message')) 'Log allowlist failed.'
+$heldLog = [IO.FileStream]::new($log,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+try {
+    try { Read-IncidentLogs -LiteralPath @($log) | Out-Null; throw 'Locked log accepted.' }
+    catch { Check ($_.Exception.Message -eq 'INCIDENT_FILE_IO_FAILED') 'Log wrapper hid collection failure.' }
+} finally { $heldLog.Dispose() }
 [IO.File]::WriteAllText($log, "{}`nnot-json")
 try { Read-IncidentLogs -LiteralPath @($log) | Out-Null; throw 'Malformed log batch accepted.' }
 catch { Check ($_.Exception.Message -eq 'INCIDENT_LOG_INVALID') 'Wrong malformed batch failure.' }
@@ -83,7 +88,7 @@ foreach ($badPath in @('\\server\share\file.json', 'Z:\missing\file.json')) {
 $held = [IO.FileStream]::new($incident,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
 try {
     try { Read-IncidentFile -LiteralPath $incident -MaxBytes 1048576 | Out-Null; throw 'Locked input accepted.' }
-    catch { Check ($_.Exception.Message -eq 'INCIDENT_FILE_INVALID') 'Wrong locked input failure.' }
+    catch { Check ($_.Exception.Message -eq 'INCIDENT_FILE_IO_FAILED') 'Locked input was not a collection failure.' }
 }
 finally { $held.Dispose() }
 $junction = Join-Path $fixture 'junction'
@@ -99,6 +104,11 @@ $coreHash = (Get-FileHash -LiteralPath $corePath -Algorithm SHA256).Hash
 $core = @(Read-IncidentCoreReport -LiteralPath $corePath)
 Check ($core.Count -eq 1 -and $core[0].schema_version -eq 1 -and @($core[0].results | Where-Object code -eq 'RUNTIME_ENFORCEMENT_UNKNOWN').Count -eq 1) 'Actual core report rejected or output spilled.'
 Check ((Get-FileHash -LiteralPath $corePath -Algorithm SHA256).Hash -eq $coreHash) 'Core input changed.'
+$heldCore = [IO.FileStream]::new($corePath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+try {
+    try { Read-IncidentCoreReport -LiteralPath $corePath | Out-Null; throw 'Locked core accepted.' }
+    catch { Check ($_.Exception.Message -eq 'INCIDENT_FILE_IO_FAILED') 'Core wrapper hid collection failure.' }
+} finally { $heldCore.Dispose() }
 foreach ($case in @(
     @{ section='incident'; record=''; field='runtime_kind'; value=@() },
     @{ section='evidence'; record='workspace_path'; field='probe'; value=@() },
