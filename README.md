@@ -1,7 +1,9 @@
 # Boundary Lens
 
+English | [한국어](https://github.com/nowwcastle-sudo/boundary-lens/blob/main/README.ko.md)
+
 Read-only Windows path, reparse-point and ACL evidence for one declared
-workspace and one failed path. **Experimental open source, Apache-2.0.**
+workspace and one failed path. Experimental open source, Apache-2.0.
 This is a diagnostic aid, not an authorization check, security certificate or
 repair tool. An exit of zero means a report was produced, not that access is safe.
 
@@ -10,6 +12,50 @@ are accepted; actual ReFS and every enterprise policy are not certified.
 No installer, service, administrator session or runtime dependency installation
 is required. Native interop blocked by policy produces an explicit failure;
 do not weaken policy or use a name-based fallback.
+
+Use Boundary Lens when a Windows application cannot access a local path and
+you need evidence to discuss with its maintainer. You provide the workspace
+root and the path that failed. The report keeps the path you supplied, the
+observed target and collection gaps separate. ACL means access control list:
+the permission entries attached to a file or directory. A reparse point is a
+filesystem entry, such as a junction or symbolic link, that can redirect a path.
+
+## Features and command reference
+
+| Feature | Input or option | What you get | Limit |
+|---|---|---|---|
+| Inspect one incident | Required `-Workspace` and `-FailedPath` | Path and ACL evidence for the two declared paths | No recursive workspace inventory or file-content analysis |
+| Accept local paths | Nonblank, one-letter drive-qualified absolute paths on local NTFS/ReFS | Original and normalized lexical paths retained separately | Rejects relative/provider-qualified paths, reserved DOS device components, UNC, remote URI/WSL forms and detected UNC-backed drives |
+| Observe path redirection | Existing path components, including supported reparse points | Final paths, reparse observations and logical/final workspace relations | Missing targets, unsupported targets and changed topology remain explicit gaps; no automatic repair |
+| Observe ACL metadata | Security descriptor from the held object | Selected identity fingerprints and access masks | No effective-access decision or complete inheritance evaluation; unsupported ACL shapes remain gaps |
+| Read a terminal report | `-Format Text` (default) | Counts for four evidence records, then status, code, evidence references and next observation | Counts describe collection, not whether access is safe |
+| Preserve detailed evidence | `-Format Json` | Compressed JSON with `schema_version = 1`, `incident`, `evidence` and `results` | Printed to stdout; the operator must save and review it |
+| Suggest the next observation | Result rows | A `REPARSE_TARGET_MISMATCH` cause candidate when the observed relations support it, plus failures and unknowns | A candidate is not a confirmed cause; `RUNTIME_ENFORCEMENT_UNKNOWN` remains |
+| Call from PowerShell | Dot-source the script, then `Invoke-BoundaryLens` | The same report formats and local help | Normal terminating PowerShell errors; fixed support errors belong to the direct process entry |
+
+`-Workspace` and `-FailedPath` name the incident inputs, not output folders.
+The direct process entry accepts the three full option names in any order or
+case. It rejects abbreviated, duplicate, unknown, positional and colon-joined
+options. There is no output-file option; use the guarded saving steps below.
+
+## Start here
+
+Open PowerShell 7 (`pwsh`) on Windows x64 as your ordinary user. Windows
+PowerShell 5.1 is outside this runtime contract. The script needs native interop;
+policy that blocks it can prevent collection. Use your approved serviced
+PowerShell 7 installation and keep policy restrictions in place.
+
+For a first run, follow **Download → Verify and extract → First use** in the
+same PowerShell session, one line at a time. The examples retain variables
+between steps. Skip **Build from source** unless you want to package a clone.
+Then read the result before saving or sharing anything. The download step uses
+the network to retrieve the ZIP from GitHub; the diagnostic has no report-upload
+feature. See the network-isolation limit under **How to read results**.
+
+These English and Korean files are repository documentation. They may be newer
+than the README inside the fixed `v0.2.0-experimental.1` ZIP. That release still
+contains four members and does not include `README.ko.md`; these documentation
+changes do not replace its script, archive or published checksums.
 
 ## Download the experimental release
 
@@ -176,6 +222,17 @@ layouts. This repository starts with a new public history; private development
 records and artifacts are not part of its releases.
 
 ## How to read results
+
+| Process exit | Meaning | Next action |
+|---|---|---|
+| `0` | A report was produced, even with collection failures or unknowns | Read `results` and `next_observation`; do not close the incident on the exit alone |
+| `2` | Invalid input (`BOUNDARY_INPUT_INVALID`) or rejected remote input (`BOUNDARY_REMOTE_UNSUPPORTED`) | Check full option names and the original local absolute paths; preserve the original error |
+| `3` | Unexpected product failure (`BOUNDARY_INTERNAL_ERROR`) | Keep local evidence and report the fixed code, exit and approved version/hash details privately |
+
+JSON `evidence` contains `workspace_path`, `failed_path`, `workspace_acl`,
+`failed_path_acl` and `path_relation`. JSON `results` contains classified
+failures, cause candidates and unknowns; observed records live in `evidence`.
+A Text report summarizes those records before printing the result rows.
 
 - observed: the named probe collected that evidence.
 - cause-candidate: evidence is consistent with a bounded cause class, not a confirmed root cause.
