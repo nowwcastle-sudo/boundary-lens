@@ -39,3 +39,16 @@ superseded by the injected partial-artifact test; actual disk-full or denied
 write conditions were not exercised. The eight-member candidate package and
 extracted companion test also passed after the fix. Two-Windows remote CI and
 the Task 1 node/changed-read proof gaps remain open.
+
+## Review fix round 2
+
+The first HTML-table version displayed core evidence but omitted the
+core-summary result rows and each observation's observed-at time. Focused
+mutation tests changed only one minimized result's status/reason code or only
+one observation time: HTML did not change (handoff and interface exit 1 before
+the fix). The renderer now adds an encoded core-results status/reason-code
+table and an observed-at column. Null time appears as unavailable, and the
+page states that a cause-candidate is not a proved cause. The JSON projection
+and original core report are unchanged. Focused handoff and interface
+assertion counts and final package identity are recorded in the local Task 3
+SDD report; the parent owns the final whole-branch gate.

@@ -21,10 +21,13 @@ checks are repeated before creation and the opened output path is checked
 before bytes are written; privileged namespace replacement between these
 steps is outside the guarantee.
 
-HTML has separate core-summary, incident-context, observation and handoff
-tables. The provenance and status columns distinguish measured, supplied and
-unavailable rows. Every variable cell is HTML-encoded; the page has no script,
-form, external asset or automatic request.
+HTML has separate core-evidence, core-results, incident-context, observation
+and handoff-summary tables. The core-results table keeps minimized result
+status and reason code, so a cause-candidate stays distinct from a proved
+cause; UNKNOWN remains visible. The observation table shows source, status
+and observed-at time, with unavailable shown for a null time. Every variable
+cell is HTML-encoded; the page has no script, form, external asset or
+automatic request.
 
 The companion consumes an explicitly saved `BoundaryLens.ps1 -Format Json` report. It does not run the original collector, another product, a URI request, or a repair. Keep the full core report and incident input locally. The published `v0.2.0-experimental.1` ZIP is unchanged and does not contain this companion.
 

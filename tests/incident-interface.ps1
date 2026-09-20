@@ -50,6 +50,7 @@ $html=[IO.File]::ReadAllText($repeat)
 Check ($html -notmatch '<script|<iframe|<img|<link|<form') 'HTML active resource.'
 Check (($html -split '<table').Count -ge 4) 'HTML has no separate summary, context and observations tables.'
 Check ($html.Contains('<th scope="col">Provenance</th>') -and $html.Contains('<th scope="col">Status</th>')) 'HTML does not distinguish evidence source and availability.'
+Check ($html.Contains('<caption>Core results</caption>') -and $html.Contains('<th scope="col">Observed at</th>')) 'HTML result and observation-time columns are absent.'
 foreach ($argsToTry in @(@('-Unknown','x'),@('-Format','Xml'),@('-Format','Json','-Format','Html'),@('-Output'))) {
     $bad=Join-Path ([IO.Path]::GetTempPath()) ('boundary-incident-bad-' + [guid]::NewGuid().ToString('N') + '.json')
     @(& pwsh -NoProfile -NonInteractive -File $script -CoreReport $core -Incident $incident -Output $bad @argsToTry 2>$null) | Out-Null

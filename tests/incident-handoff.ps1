@@ -28,8 +28,21 @@ Check ($json.Contains('RUNTIME_ENFORCEMENT_UNKNOWN')) 'Runtime unknown was lost.
 foreach ($secret in $sensitive) { Check (-not $json.Contains($secret)) 'Sensitive JSON string leaked.'; Check (-not $html.Contains($secret)) 'Sensitive HTML string leaked.' }
 Check ($html -notmatch '<script|<iframe|<img|<link|<form') 'Active or remote HTML resource.'
 Check (($html -split '<table').Count -ge 4) 'HTML lacks separate readable tables.'
+$changedResult=$handoff.Clone()
+$changedResult['core_summary']=$handoff.core_summary.Clone()
+$changedResult.core_summary['results']=@(@{status='cause-candidate';code='REPARSE_TARGET_MISMATCH'})
+$resultHtml=ConvertTo-IncidentHtml -Handoff $changedResult
+Check ($resultHtml -cne $html -and $resultHtml.Contains('cause-candidate') -and $resultHtml.Contains('REPARSE_TARGET_MISMATCH')) 'Core result status/code missing from HTML.'
+$changedTime=$handoff.Clone()
+$changedTime['observations']=@($handoff.observations)
+$changedTime.observations[0]=$handoff.observations[0].Clone()
+$changedTime.observations[0]['observed_at']='2026-09-19T01:02:03Z'
+$timeHtml=ConvertTo-IncidentHtml -Handoff $changedTime
+Check ($timeHtml -cne $html -and $timeHtml.Contains('2026-09-19T01:02:03Z')) 'Observation time missing from HTML.'
+$nullTime=$handoff.observations[1]
+Check ($null -eq $nullTime.observed_at -and $html.Contains('<td>log</td><td>operator-supplied</td><td>supplied</td><td>unavailable</td>')) 'Null observation time was not represented as unavailable in its row.'
 $poisoned=$handoff.Clone()
-$poisoned['observations']=@(@{kind='log';provenance='operator-supplied';status='supplied';value='<script>alert(1)</script>';error_code=$null})
+$poisoned['observations']=@(@{kind='log';provenance='operator-supplied';status='supplied';value='<script>alert(1)</script>';observed_at=$null;error_code=$null})
 $encodedHtml=ConvertTo-IncidentHtml -Handoff $poisoned
 Check ($encodedHtml.Contains('&lt;script&gt;alert(1)&lt;/script&gt;') -and -not $encodedHtml.Contains('<script>alert(1)</script>')) 'HTML observation cell was not encoded.'
 Check ($handoff.incident_context.product -eq 'product-1') 'Product was not aliased.'

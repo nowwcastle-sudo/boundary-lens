@@ -128,10 +128,13 @@ function ConvertTo-IncidentHtml {
     [void]$html.Append('<!doctype html><html lang="en"><meta charset="utf-8"><title>Boundary Lens incident handoff</title><style>body{font:16px system-ui;max-width:72rem;margin:2rem auto;padding:0 1rem;color:#17212b}table{width:100%;border-collapse:collapse;margin:0 0 1.5rem}th,td{border:1px solid #cbd5dc;padding:.5rem;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eef2f5}caption{text-align:left;font-weight:700;margin:.5rem 0}</style><h1>Minimized incident handoff</h1><p>Evidence is labelled by source and availability. Runtime enforcement remains unknown.</p>')
     [void]$html.Append('<table><caption>Core summary</caption><thead><tr><th scope="col">Path</th><th scope="col">Probe</th><th scope="col">Status</th><th scope="col">Error</th></tr></thead><tbody>')
     foreach ($row in @($Handoff.core_summary.evidence)) { Add-HandoffHtmlRow $html @($row.path,$row.probe,$row.status,$row.error_code) }
-    [void]$html.Append('</tbody></table><table><caption>Incident context</caption><thead><tr><th scope="col">Field</th><th scope="col">Minimized value</th></tr></thead><tbody>')
+    [void]$html.Append('</tbody></table><table><caption>Core results</caption><thead><tr><th scope="col">Status</th><th scope="col">Reason code</th></tr></thead><tbody>')
+    foreach ($row in @($Handoff.core_summary.results)) { Add-HandoffHtmlRow $html @($row.status,$row.code) }
+    [void]$html.Append('</tbody></table><p>A cause-candidate is not a proved cause; UNKNOWN and collection failures remain open.</p>')
+    [void]$html.Append('<table><caption>Incident context</caption><thead><tr><th scope="col">Field</th><th scope="col">Minimized value</th></tr></thead><tbody>')
     foreach ($key in @('occurred_at','product','version','error_code','runtime_uri_present','process_selected','supplied_observation_count')) { Add-HandoffHtmlRow $html @($key,$Handoff.incident_context[$key]) }
-    [void]$html.Append('</tbody></table><table><caption>Observations</caption><thead><tr><th scope="col">Kind</th><th scope="col">Provenance</th><th scope="col">Status</th><th scope="col">Value</th><th scope="col">Error</th></tr></thead><tbody>')
-    foreach ($row in @($Handoff.observations)) { Add-HandoffHtmlRow $html @($row.kind,$row.provenance,$row.status,$row.value,$row.error_code) }
+    [void]$html.Append('</tbody></table><table><caption>Observations</caption><thead><tr><th scope="col">Kind</th><th scope="col">Provenance</th><th scope="col">Status</th><th scope="col">Observed at</th><th scope="col">Value</th><th scope="col">Error</th></tr></thead><tbody>')
+    foreach ($row in @($Handoff.observations)) { Add-HandoffHtmlRow $html @($row.kind,$row.provenance,$row.status,$row.observed_at,$row.value,$row.error_code) }
     [void]$html.Append('</tbody></table><table><caption>Handoff summary</caption><thead><tr><th scope="col">Status</th><th scope="col">Unavailable observations</th><th scope="col">Runtime enforcement</th><th scope="col">Next observation</th></tr></thead><tbody>')
     Add-HandoffHtmlRow $html @($Handoff.handoff_summary.status,$Handoff.handoff_summary.unavailable_observation_count,$Handoff.handoff_summary.runtime_enforcement,$Handoff.handoff_summary.next_observation)
     [void]$html.Append('</tbody></table></html>')
