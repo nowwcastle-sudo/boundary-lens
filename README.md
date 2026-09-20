@@ -253,6 +253,11 @@ handoff was written, and `2` means usage, schema or path rejection. An
 incomplete file, if present, remains for review. The destination must be a
 fresh local file outside investigated paths; existing files are never replaced.
 
+If the companion cannot establish the current physical workspace boundary, it
+refuses the export before creating a file. A missing failed target requires a
+verified existing parent directory. This can prevent a handoff for an
+unverified workspace; keep the original diagnostic JSON for investigation.
+
 The handoff keeps known result/status codes, path labels, provenance and
 UNKNOWN. It replaces arbitrary product, version, error, process, filter,
 runtime and log strings with local aliases. Those raw strings stay only in
@@ -260,7 +265,7 @@ your separate incident/core/log inputs. This is a deliberate loss of detail:
 the default shared handoff cannot identify a product from its alias. It is
 minimized, not anonymous; timestamps and filesystem size can identify a case.
 Review the actual file before sharing it. Generic strings cannot be guaranteed
-secret-free if copied outside this allowlist. See [local incident guide](docs/local-incident.md).
+secret-free if copied outside this allowlist. See the [local incident guide](https://github.com/nowwcastle-sudo/boundary-lens/blob/main/docs/local-incident.md).
 
 ## How to read results
 
