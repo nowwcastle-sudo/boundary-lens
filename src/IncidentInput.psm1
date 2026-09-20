@@ -280,7 +280,7 @@ function Read-IncidentCoreReport {
 }
 
 function Read-IncidentLogs {
-    param([Parameter(Mandatory)][string[]]$LiteralPath)
+    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$LiteralPath)
     $records = [Collections.Generic.List[object]]::new()
     [long]$total = 0
     foreach ($path in $LiteralPath) {

@@ -7,6 +7,8 @@ try { ConvertFrom-IncidentJson -Bytes $duplicate | Out-Null }
 catch { $rejected = $_.Exception.Message -eq 'INCIDENT_JSON_INVALID' }
 if (-not $rejected) { throw 'Duplicate key was accepted.' }
 $checks = 1
+if (@(Read-IncidentLogs -LiteralPath @()).Count -ne 0) { throw 'Empty selected log set failed.' }
+$checks++
 function Reject-Json([string]$Json) {
     $script:checks++
     try { ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes($Json)) | Out-Null }
