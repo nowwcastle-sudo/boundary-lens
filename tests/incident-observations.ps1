@@ -45,35 +45,46 @@ Check-Shape $missing
 $module = Get-Module IncidentObservations
 & $module {
     $script:Mode = 'exit'
-    $script:StartReads = 0
+    $script:Opened = 0
+    $script:Closed = 0
     function script:Open-IncidentProcess([int]$ProcessId) {
+        if ($ProcessId -ne 99) { throw 'Unexpected PID.' }
+        $script:Opened++
         if ($script:Mode -eq 'denied') { throw [UnauthorizedAccessException]::new('private') }
-        return [pscustomobject]@{ marker='synthetic' }
+        if ($script:Mode -eq 'second-missing' -and $script:Opened -eq 2) { throw [ArgumentException]::new('ended') }
+        if ($script:Mode -eq 'second-denied' -and $script:Opened -eq 2) { throw [UnauthorizedAccessException]::new('private') }
+        return [pscustomobject]@{ marker='synthetic'; instance=$script:Opened }
     }
     function script:Read-IncidentProcessField([object]$Process, [string]$Field) {
         if ($Field -eq 'start') {
-            $script:StartReads++
-            if ($script:Mode -eq 'reuse' -and $script:StartReads -eq 2) { return [datetime]'2026-09-20T01:00:00Z' }
+            if ($script:Mode -eq 'reuse' -and $Process.instance -eq 2) { return [datetime]'2026-09-20T01:00:00Z' }
             return [datetime]'2026-09-20T00:00:00Z'
         }
         if ($Field -eq 'name') { return 'synthetic' }
-        if ($Field -eq 'exited') { return ($script:Mode -eq 'exit') }
+        if ($Field -eq 'exited') { return ($script:Mode -eq 'exit' -or ($script:Mode -eq 'second-exited' -and $Process.instance -eq 2)) }
     }
-    function script:Close-IncidentProcess([object]$Process) { $script:Closed = $true }
+    function script:Close-IncidentProcess([object]$Process) { $script:Closed++ }
 }
 $exited = Get-IncidentProcessObservation -ProcessId 99
 Check ($exited.error_code -eq 'PROCESS_EXITED') 'Exited PID not fixed failure.'
 Check-Shape $exited
-& $module { $script:Mode='reuse'; $script:StartReads=0; $script:Closed=$false }
+& $module { $script:Mode='reuse'; $script:Opened=0; $script:Closed=0 }
 $reuse = Get-IncidentProcessObservation -ProcessId 99
 Check ($reuse.error_code -eq 'PROCESS_IDENTITY_CHANGED') 'Changed start time not detected.'
 Check-Shape $reuse
-Check (& $module { $script:Closed }) 'Process handle not closed.'
-& $module { $script:Mode='stable'; $script:StartReads=0 }
+Check ((& $module { $script:Closed }) -eq 2) 'Both process handles were not closed.'
+& $module { $script:Mode='stable'; $script:Opened=0; $script:Closed=0 }
 $wrongPin = Get-IncidentProcessObservation -ProcessId 99 -ExpectedStartTime ([datetime]'2026-09-19T00:00:00Z')
 Check ($wrongPin.error_code -eq 'PROCESS_IDENTITY_CHANGED') 'Prior identity pin not enforced.'
 Check-Shape $wrongPin
-& $module { $script:Mode='denied' }
+foreach ($mode in @('second-missing','second-exited','second-denied')) {
+    & $module { param($testMode) $script:Mode=$testMode; $script:Opened=0; $script:Closed=0 } $mode
+    $changed = Get-IncidentProcessObservation -ProcessId 99
+    $expected = if ($mode -eq 'second-denied') { 'PROCESS_ACCESS_DENIED' } else { 'PROCESS_EXITED' }
+    Check ($changed.error_code -eq $expected) "Second process query $mode not unavailable as $expected."
+    Check-Shape $changed
+}
+& $module { $script:Mode='denied'; $script:Opened=0 }
 $denied = Get-IncidentProcessObservation -ProcessId 99
 Check ($denied.error_code -eq 'PROCESS_ACCESS_DENIED') 'Process denial not fixed failure.'
 Check-Shape $denied

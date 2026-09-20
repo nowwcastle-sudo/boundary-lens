@@ -25,13 +25,20 @@ function Get-IncidentProcessObservation {
     $result = New-IncidentObservation 'process' 'local-query' 'unavailable' $null $null 'PROCESS_UNAVAILABLE'
     if ($ProcessId -le 0) { $result.error_code = 'PROCESS_NOT_FOUND'; return $result }
     $process = $null
+    $confirmation = $null
     try {
         $process = Open-IncidentProcess $ProcessId
         $first = [datetime](Read-IncidentProcessField $process 'start')
         $name = [string](Read-IncidentProcessField $process 'name')
         $exited = [bool](Read-IncidentProcessField $process 'exited')
-        $last = [datetime](Read-IncidentProcessField $process 'start')
         if ($exited) { $result.error_code = 'PROCESS_EXITED'; return $result }
+        # StartTime is cached per Process object; a new object makes the final PID query independent.
+        $confirmation = Open-IncidentProcess $ProcessId
+        $last = [datetime](Read-IncidentProcessField $confirmation 'start')
+        if ([bool](Read-IncidentProcessField $confirmation 'exited')) {
+            $result.error_code = 'PROCESS_EXITED'
+            return $result
+        }
         if ($first -ne $last -or ($null -ne $ExpectedStartTime -and $first -ne [datetime]$ExpectedStartTime)) {
             $result.error_code = 'PROCESS_IDENTITY_CHANGED'
             return $result
@@ -49,11 +56,17 @@ function Get-IncidentProcessObservation {
             ($error -is [ComponentModel.Win32Exception] -and $error.NativeErrorCode -eq 5)) {
             $result.error_code = 'PROCESS_ACCESS_DENIED'
         }
-        elseif ($error -is [ArgumentException]) { $result.error_code = 'PROCESS_NOT_FOUND' }
+        elseif ($error -is [ArgumentException]) {
+            if ($null -ne $process) { $result.error_code = 'PROCESS_EXITED' }
+            else { $result.error_code = 'PROCESS_NOT_FOUND' }
+        }
         elseif ($error -is [InvalidOperationException]) { $result.error_code = 'PROCESS_EXITED' }
         else { $result.error_code = 'PROCESS_UNAVAILABLE' }
     }
-    finally { if ($null -ne $process) { Close-IncidentProcess $process } }
+    finally {
+        if ($null -ne $confirmation) { Close-IncidentProcess $confirmation }
+        if ($null -ne $process) { Close-IncidentProcess $process }
+    }
     return $result
 }
 
