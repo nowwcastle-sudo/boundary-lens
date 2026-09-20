@@ -60,9 +60,10 @@ RUNTIME_ENFORCEMENT_UNKNOWN은 유지한다. 프로세스 메타데이터나 로
 한 줄만으로 실제 접근 허용·차단 원인, ACL 정상, 네트워크 격리를 확정하지
 않는다. 새 원인 후보는 사전에 정의한 근거가 있을 때만 추가한다.
 
-내보내기에는 core_report, incident_context, observations, handoff_summary를
-구분한다. 외부에 전달하는 최소화본에는 원시 core_report 대신 최소화된
-필드만 사용하며 원래 보고서는 사용자의 별도 로컬 파일로 남는다.
+내부 조합 모델은 원래 core_report와 추가 문맥을 구분한다. 전달본에는
+core_summary, incident_context, observations, handoff_summary만 넣으며
+core_summary는 최소화된 필드다. 원시 core_report는 전달본에 복사하지
+않고 사용자의 별도 로컬 파일에 남는다.
 
 ## 5. 검증 기준
 
