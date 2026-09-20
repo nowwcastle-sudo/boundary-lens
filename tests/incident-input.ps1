@@ -28,6 +28,10 @@ $valid = ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes('{"sche
 Check ($valid['product'] -ceq 'a') 'Valid JSON changed.'
 $atLimit = ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes('{"value":"' + ('x' * 4096) + '"}'))
 Check ($atLimit['value'].Length -eq 4096) 'Exact string limit rejected.'
+$exactNodes = ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes(('[' + ('0,' * 99998) + '0]')))
+Check ($exactNodes.Count -eq 99999) 'Exactly 100000 JSON nodes rejected.'
+try { ConvertFrom-IncidentJson -Bytes ([Text.Encoding]::UTF8.GetBytes(('[' + ('0,' * 99999) + '0]'))) | Out-Null; throw '100001 JSON nodes accepted.' }
+catch { Check ($_.Exception.Message -eq 'INCIDENT_JSON_INVALID') 'Wrong 100001-node failure.' }
 try { ConvertFrom-IncidentJson -Bytes ([byte[]]@(123,34,120,34,58,34,255,34,125)) | Out-Null; throw 'Invalid UTF-8 accepted.' }
 catch { Check ($_.Exception.Message -eq 'INCIDENT_JSON_INVALID') 'Wrong UTF-8 failure.' }
 try { ConvertFrom-IncidentJson -Bytes ([byte[]]@()) | Out-Null; throw 'Empty JSON bytes accepted.' }
@@ -142,4 +146,22 @@ $spoof['evidence']['workspace_path']['observations']['unsafe'] = 'SAFE'
 [IO.File]::WriteAllText($corePath,($spoof | ConvertTo-Json -Depth 32))
 try { Read-IncidentCoreReport -LiteralPath $corePath | Out-Null; throw 'Nested extra core field accepted.' }
 catch { Check ($_.Exception.Message -eq 'INCIDENT_SCHEMA_INVALID') 'Wrong nested core failure.' }
+$changedRead = Join-Path $fixture 'changed-read.json'
+[IO.File]::WriteAllText($changedRead,$good,[Text.UTF8Encoding]::new($false))
+$changedHash = (Get-FileHash -LiteralPath $changedRead -Algorithm SHA256).Hash
+$beforeChangedTime = [IO.File]::GetLastWriteTimeUtc($changedRead)
+Check ((Read-IncidentFile -LiteralPath $changedRead -MaxBytes 1048576).Length -gt 0) 'Unchanged read positive control failed.'
+$inputModule = Get-Module IncidentInput
+& $inputModule {
+    $script:OriginalPathCheck=(Get-Command Test-IncidentPath).ScriptBlock
+    $script:PathCheckCount=0
+    function script:Test-IncidentPath([string]$LiteralPath) {
+        $script:PathCheckCount++
+        if ($script:PathCheckCount -eq 2) { [IO.File]::SetLastWriteTimeUtc($LiteralPath,[IO.File]::GetLastWriteTimeUtc($LiteralPath).AddMinutes(1)) }
+        & $script:OriginalPathCheck $LiteralPath
+    }
+}
+try { Read-IncidentFile -LiteralPath $changedRead -MaxBytes 1048576 | Out-Null; throw 'Changed-during-read timestamp accepted.' }
+catch { Check ($_.Exception.Message -eq 'INCIDENT_FILE_INVALID') 'Wrong changed-read failure.' }
+Check ((& $inputModule { $script:PathCheckCount }) -eq 2 -and [IO.File]::GetLastWriteTimeUtc($changedRead) -ne $beforeChangedTime -and (Get-FileHash -LiteralPath $changedRead -Algorithm SHA256).Hash -eq $changedHash) 'Timestamp mutation did not occur during held read with unchanged bytes.'
 Write-Output "incident-input assertions=$checks"

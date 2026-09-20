@@ -258,6 +258,12 @@ refuses the export before creating a file. A missing failed target requires a
 verified existing parent directory. This can prevent a handoff for an
 unverified workspace; keep the original diagnostic JSON for investigation.
 
+The companion's volume query measures the drive named in the declared failed
+path (`observation_scope: declared-path-drive`). A junction or other path
+redirection can lead to a different target volume, whose relationship to that
+drive remains `unknown`. Neither the JSON nor HTML handoff claims to measure
+the resolved target volume; obtain separate target-volume evidence if needed.
+
 The handoff keeps known result/status codes, path labels, provenance and
 UNKNOWN. It replaces arbitrary product, version, error, process, filter,
 runtime and log strings with local aliases. Those raw strings stay only in

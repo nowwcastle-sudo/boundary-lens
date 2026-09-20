@@ -27,7 +27,16 @@ status and reason code, so a cause-candidate stays distinct from a proved
 cause; UNKNOWN remains visible. The observation table shows source, status
 and observed-at time, with unavailable shown for a null time. Every variable
 cell is HTML-encoded; the page has no script, form, external asset or
-automatic request.
+automatic request. The five tables remain keyboard-scrollable in narrow
+viewports, and the document has a main landmark.
+
+Volume observations query only the drive declared by the failed-path input.
+The fixed `observation_scope` value is `declared-path-drive`; the
+`target_volume_relationship` is `unknown`, including when that query fails.
+A junction can lead to another volume, so the displayed free space and file
+system do not establish the resolved target volume. The same scope and
+unknown relationship appear in the minimized JSON and HTML. Obtain separate
+target-volume evidence if that distinction matters to the incident.
 
 The companion consumes an explicitly saved `BoundaryLens.ps1 -Format Json` report. It does not run the original collector, another product, a URI request, or a repair. Keep the full core report and incident input locally. The published `v0.2.0-experimental.1` ZIP is unchanged and does not contain this companion.
 

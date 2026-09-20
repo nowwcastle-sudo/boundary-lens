@@ -73,6 +73,8 @@ function Get-IncidentProcessObservation {
 function Get-IncidentVolumeObservation {
     param([Parameter(Mandatory)][string]$LocalPath)
     $result = New-IncidentObservation 'volume' 'local-query' 'unavailable' $null $null 'VOLUME_UNSUPPORTED'
+    $result.observation_scope = 'declared-path-drive'
+    $result.target_volume_relationship = 'unknown'
     if ($LocalPath -cnotmatch '^[A-Za-z]:\\' -or $LocalPath.Substring(2).Contains(':') -or
         $LocalPath -match '[\\/](\.|\.\.)[\\/]' -or $LocalPath -match '[\\/]\.\.?$') { return $result }
     try {

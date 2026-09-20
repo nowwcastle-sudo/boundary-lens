@@ -32,7 +32,8 @@ public static class BoundaryHandoffPath {
 function Test-HandoffCode([string]$Value) {
     return $Value -cin @('ACL_ACE_UNSUPPORTED','ACL_COLLECTION_FAILED','ACL_DACL_UNSUPPORTED','ACL_NOT_OBSERVED',
         'FINAL_CONTAINMENT_UNKNOWN','FINAL_PATH_UNKNOWN','FINAL_WORKSPACE_UNKNOWN','LOGICAL_CONTAINMENT_UNKNOWN',
-        'NATIVE_COLLECTION_UNAVAILABLE','NATIVE_CONTRACT_MISMATCH','PATH_TOPOLOGY_CHANGED','PATH_TOPOLOGY_UNAVAILABLE',
+        'NATIVE_COLLECTION_UNAVAILABLE','NATIVE_COLLECTION_FAILED','NATIVE_CONTRACT_MISMATCH','NATIVE_VOLUME_UNSUPPORTED',
+        'PATH_PROBE_UNAVAILABLE','PATH_RESOLUTION_FAILED','PATH_TOPOLOGY_CHANGED','PATH_TOPOLOGY_UNAVAILABLE',
         'REMOTE_REPARSE_TARGET_UNSUPPORTED','REPARSE_RELATION_UNKNOWN','REPARSE_TARGET_MISMATCH',
         'REPARSE_TARGET_UNRESOLVED','RUNTIME_ENFORCEMENT_UNKNOWN','TARGET_NOT_OBSERVED','WORKSPACE_NOT_FOUND',
         'PROCESS_EXITED','PROCESS_ACCESS_DENIED','PROCESS_NOT_FOUND','PROCESS_IDENTITY_CHANGED','PROCESS_UNAVAILABLE',
@@ -103,7 +104,9 @@ function New-IncidentHandoff {
             'runtime' { $aliases['runtime'] = 1 + [int]$aliases['runtime']; $value = @{label="runtime-$($aliases['runtime'])"} }
             'incident-context' { $value = @{label='incident-context'} }
         }
-        $minimized.Add(@{kind=$kind;provenance=$provenance;status=$status;value=$value;observed_at=(Get-HandoffTime $row.observed_at);error_code=$(if ($null -ne $row.error_code) { Get-HandoffCode $row.error_code } else { $null })})
+        $entry = @{kind=$kind;provenance=$provenance;status=$status;value=$value;observed_at=(Get-HandoffTime $row.observed_at);error_code=$(if ($null -ne $row.error_code) { Get-HandoffCode $row.error_code } else { $null })}
+        if ($kind -eq 'volume') { $entry.observation_scope='declared-path-drive'; $entry.target_volume_relationship='unknown' }
+        $minimized.Add($entry)
     }
     return @{core_summary=@{schema_version=$(if ($CoreReport.schema_version -eq 1) {1} else {$null});runtime_kind='windows-local';path_labels=@('workspace','failed-target');evidence=$coreEvidence.ToArray();results=$results.ToArray()};incident_context=$incident;observations=$minimized.ToArray();handoff_summary=@{status=$(if ($unavailable -gt 0) {'incomplete'} else {'complete'});unavailable_observation_count=$unavailable;runtime_enforcement='RUNTIME_ENFORCEMENT_UNKNOWN';next_observation='Review local original core report and unavailable evidence; runtime enforcement remains unknown.'}}
 }
@@ -125,19 +128,19 @@ function Add-HandoffHtmlRow([Text.StringBuilder]$Builder,[object[]]$Cells) {
 function ConvertTo-IncidentHtml {
     param([Parameter(Mandatory)][hashtable]$Handoff)
     $html=[Text.StringBuilder]::new()
-    [void]$html.Append('<!doctype html><html lang="en"><meta charset="utf-8"><title>Boundary Lens incident handoff</title><style>body{font:16px system-ui;max-width:72rem;margin:2rem auto;padding:0 1rem;color:#17212b}table{width:100%;border-collapse:collapse;margin:0 0 1.5rem}th,td{border:1px solid #cbd5dc;padding:.5rem;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eef2f5}caption{text-align:left;font-weight:700;margin:.5rem 0}</style><h1>Minimized incident handoff</h1><p>Evidence is labelled by source and availability. Runtime enforcement remains unknown.</p>')
-    [void]$html.Append('<table><caption>Core summary</caption><thead><tr><th scope="col">Path</th><th scope="col">Probe</th><th scope="col">Status</th><th scope="col">Error</th></tr></thead><tbody>')
+    [void]$html.Append('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Boundary Lens incident handoff</title><style>body{font:16px system-ui;max-width:72rem;margin:2rem auto;padding:0 1rem;color:#17212b}.table-scroll{max-width:100%;overflow-x:auto;margin:0 0 1.5rem}table{width:100%;min-width:44rem;border-collapse:collapse}.wide{min-width:70rem}th,td{border:1px solid #cbd5dc;padding:.5rem;text-align:left;vertical-align:top;overflow-wrap:break-word}th{background:#eef2f5}caption{text-align:left;font-weight:700;margin:.5rem 0}</style><main><h1>Minimized incident handoff</h1><p>Evidence is labelled by source and availability. Runtime enforcement remains unknown.</p>')
+    [void]$html.Append('<div class="table-scroll" role="region" aria-label="Core summary table" tabindex="0"><table><caption>Core summary</caption><thead><tr><th scope="col">Path</th><th scope="col">Probe</th><th scope="col">Status</th><th scope="col">Error</th></tr></thead><tbody>')
     foreach ($row in @($Handoff.core_summary.evidence)) { Add-HandoffHtmlRow $html @($row.path,$row.probe,$row.status,$row.error_code) }
-    [void]$html.Append('</tbody></table><table><caption>Core results</caption><thead><tr><th scope="col">Status</th><th scope="col">Reason code</th></tr></thead><tbody>')
+    [void]$html.Append('</tbody></table></div><div class="table-scroll" role="region" aria-label="Core results table" tabindex="0"><table><caption>Core results</caption><thead><tr><th scope="col">Status</th><th scope="col">Reason code</th></tr></thead><tbody>')
     foreach ($row in @($Handoff.core_summary.results)) { Add-HandoffHtmlRow $html @($row.status,$row.code) }
-    [void]$html.Append('</tbody></table><p>A cause-candidate is not a proved cause; UNKNOWN and collection failures remain open.</p>')
-    [void]$html.Append('<table><caption>Incident context</caption><thead><tr><th scope="col">Field</th><th scope="col">Minimized value</th></tr></thead><tbody>')
+    [void]$html.Append('</tbody></table></div><p>A cause-candidate is not a proved cause; UNKNOWN and collection failures remain open.</p>')
+    [void]$html.Append('<div class="table-scroll" role="region" aria-label="Incident context table" tabindex="0"><table><caption>Incident context</caption><thead><tr><th scope="col">Field</th><th scope="col">Minimized value</th></tr></thead><tbody>')
     foreach ($key in @('occurred_at','product','version','error_code','runtime_uri_present','process_selected','supplied_observation_count')) { Add-HandoffHtmlRow $html @($key,$Handoff.incident_context[$key]) }
-    [void]$html.Append('</tbody></table><table><caption>Observations</caption><thead><tr><th scope="col">Kind</th><th scope="col">Provenance</th><th scope="col">Status</th><th scope="col">Observed at</th><th scope="col">Value</th><th scope="col">Error</th></tr></thead><tbody>')
-    foreach ($row in @($Handoff.observations)) { Add-HandoffHtmlRow $html @($row.kind,$row.provenance,$row.status,$row.observed_at,$row.value,$row.error_code) }
-    [void]$html.Append('</tbody></table><table><caption>Handoff summary</caption><thead><tr><th scope="col">Status</th><th scope="col">Unavailable observations</th><th scope="col">Runtime enforcement</th><th scope="col">Next observation</th></tr></thead><tbody>')
+    [void]$html.Append('</tbody></table></div><div class="table-scroll" role="region" aria-label="Observations table" tabindex="0"><table class="wide"><caption>Observations</caption><thead><tr><th scope="col">Kind</th><th scope="col">Provenance</th><th scope="col">Status</th><th scope="col">Observed at</th><th scope="col">Value</th><th scope="col">Error</th><th scope="col">Volume scope</th><th scope="col">Target volume relation</th></tr></thead><tbody>')
+    foreach ($row in @($Handoff.observations)) { Add-HandoffHtmlRow $html @($row.kind,$row.provenance,$row.status,$row.observed_at,$row.value,$row.error_code,$row['observation_scope'],$row['target_volume_relationship']) }
+    [void]$html.Append('</tbody></table></div><div class="table-scroll" role="region" aria-label="Handoff summary table" tabindex="0"><table><caption>Handoff summary</caption><thead><tr><th scope="col">Status</th><th scope="col">Unavailable observations</th><th scope="col">Runtime enforcement</th><th scope="col">Next observation</th></tr></thead><tbody>')
     Add-HandoffHtmlRow $html @($Handoff.handoff_summary.status,$Handoff.handoff_summary.unavailable_observation_count,$Handoff.handoff_summary.runtime_enforcement,$Handoff.handoff_summary.next_observation)
-    [void]$html.Append('</tbody></table></html>')
+    [void]$html.Append('</tbody></table></div></main></html>')
     return $html.ToString()
 }
 

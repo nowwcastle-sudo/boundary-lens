@@ -7,7 +7,8 @@ function Check([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 function Check-Shape([hashtable]$Observation) {
-    Check ((@($Observation.Keys | Sort-Object) -join ',') -ceq 'error_code,kind,observed_at,provenance,status,value') 'Observation shape changed.'
+    $expectedKeys = if ($Observation.kind -eq 'volume') { 'error_code,kind,observation_scope,observed_at,provenance,status,target_volume_relationship,value' } else { 'error_code,kind,observed_at,provenance,status,value' }
+    Check ((@($Observation.Keys | Sort-Object) -join ',') -ceq $expectedKeys) 'Observation shape changed.'
     Check ($Observation.provenance -in @('local-query','operator-supplied')) 'Invalid provenance.'
     Check ($Observation.status -in @('observed','supplied','unavailable')) 'Invalid status.'
     if ($Observation.status -eq 'unavailable') {
@@ -92,11 +93,13 @@ Check-Shape $denied
 $driveRoot = [IO.Path]::GetPathRoot($PSScriptRoot)
 $realVolume = Get-IncidentVolumeObservation -LocalPath (Join-Path $PSScriptRoot 'synthetic.txt')
 Check ($realVolume.status -eq 'observed' -and $realVolume.value.filesystem_type -is [string] -and $realVolume.value.available_bytes -is [long]) 'Declared local volume unavailable.'
+Check ($realVolume.observation_scope -ceq 'declared-path-drive' -and $realVolume.target_volume_relationship -ceq 'unknown') 'Observed drive was presented as resolved target volume.'
 Check (-not (($realVolume | ConvertTo-Json -Depth 8) -match 'volume_label|serial|host|[A-Za-z]:\\')) 'Volume identity leaked.'
 Check-Shape $realVolume
 $unsupported = Get-IncidentVolumeObservation -LocalPath '\\example.invalid\share\file'
 Check ($unsupported.error_code -eq 'VOLUME_UNSUPPORTED') 'UNC path accepted as local volume.'
 Check-Shape $unsupported
+Check ($unsupported.observation_scope -ceq 'declared-path-drive' -and $unsupported.target_volume_relationship -ceq 'unknown') 'Unavailable volume lost scope.'
 & $module {
     $script:DriveMode='unready'
     function script:Get-IncidentDriveInfo([string]$Root) {
@@ -117,6 +120,18 @@ Check-Shape $unsupportedDrive
 $deniedDrive = Get-IncidentVolumeObservation -LocalPath $local
 Check ($deniedDrive.error_code -eq 'VOLUME_ACCESS_DENIED') 'Volume denial not fixed failure.'
 Check-Shape $deniedDrive
+
+# A declared C: junction can resolve to D:. The injected seam checks only the declared query.
+& $module {
+    $script:DriveQueriedRoot=$null
+    function script:Get-IncidentDriveInfo([string]$Root) {
+        $script:DriveQueriedRoot=$Root
+        return [pscustomobject]@{ DriveType=[IO.DriveType]::Fixed; IsReady=$true; DriveFormat='NTFS'; AvailableFreeSpace=[long]4096 }
+    }
+}
+$junctionTarget = Get-IncidentVolumeObservation -LocalPath 'C:\synthetic-junction-to-D\file.txt'
+Check ((& $module { $script:DriveQueriedRoot }) -ceq 'C:\' -and $junctionTarget.observation_scope -ceq 'declared-path-drive' -and $junctionTarget.target_volume_relationship -ceq 'unknown') 'Junction target volume was inferred from the declared drive.'
+Check-Shape $junctionTarget
 
 $context = @{ product='SAFE'; supplied_observations=@(@{kind='filter';value='SAFE';observed_at=$null},@{kind='runtime';value='SAFE';observed_at='2026-09-20T00:00:00Z'}) }
 $core = @{ incident=@{failed_path_input=$local}; results=@(@{code='RUNTIME_ENFORCEMENT_UNKNOWN'}) }

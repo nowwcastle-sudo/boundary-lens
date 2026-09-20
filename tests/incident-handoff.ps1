@@ -49,6 +49,24 @@ Check ($handoff.incident_context.product -eq 'product-1') 'Product was not alias
 Check ($handoff.observations[0].value.label -eq 'selected-process') 'Process identity leaked.'
 Check ($html.Contains('operator-supplied')) 'Supplied provenance missing in HTML.'
 Check ($handoff.handoff_summary.runtime_enforcement -eq 'RUNTIME_ENFORCEMENT_UNKNOWN') 'Unknown summary lost.'
+$knownCodes=@('ACL_ACE_UNSUPPORTED','ACL_COLLECTION_FAILED','ACL_DACL_UNSUPPORTED','ACL_NOT_OBSERVED','FINAL_CONTAINMENT_UNKNOWN','FINAL_PATH_UNKNOWN','FINAL_WORKSPACE_UNKNOWN','LOGICAL_CONTAINMENT_UNKNOWN','NATIVE_COLLECTION_UNAVAILABLE','NATIVE_COLLECTION_FAILED','NATIVE_CONTRACT_MISMATCH','NATIVE_VOLUME_UNSUPPORTED','PATH_PROBE_UNAVAILABLE','PATH_RESOLUTION_FAILED','PATH_TOPOLOGY_CHANGED','PATH_TOPOLOGY_UNAVAILABLE','REMOTE_REPARSE_TARGET_UNSUPPORTED','REPARSE_RELATION_UNKNOWN','REPARSE_TARGET_MISMATCH','REPARSE_TARGET_UNRESOLVED','RUNTIME_ENFORCEMENT_UNKNOWN','TARGET_NOT_OBSERVED','WORKSPACE_NOT_FOUND')
+foreach ($code in ($knownCodes + @('PRIVATE_SENTINEL'))) {
+    $codedCore=$core.Clone(); $codedCore['results']=@(@{status='collection-failure';code=$code})
+    $codedCore['evidence']=$core.evidence.Clone(); $codedCore.evidence['workspace_path']=$core.evidence.workspace_path.Clone()
+    $codedCore.evidence.workspace_path['failure']=@{error_id=$code}
+    $coded=New-IncidentHandoff -CoreReport $codedCore -Context @{schema='boundary-incident/1'} -Observations @()
+    $expected=if ($code -eq 'PRIVATE_SENTINEL') {'UNRECOGNIZED_CODE'} else {$code}
+    Check ($coded.core_summary.results[0].code -ceq $expected -and $coded.core_summary.evidence[0].error_code -ceq $expected) "Code minimization failed for $code."
+}
+$volumeHandoff=New-IncidentHandoff -CoreReport $core -Context @{schema='boundary-incident/1'} -Observations @(@{kind='volume';provenance='local-query';status='observed';value=@{filesystem_type='NTFS';is_ready=$true;available_bytes=[long]4096};observed_at='2026-09-20T00:00:00Z';error_code=$null;observation_scope='declared-path-drive';target_volume_relationship='unknown'})
+$volumeRow=$volumeHandoff.observations[0]
+$volumeHtml=ConvertTo-IncidentHtml -Handoff $volumeHandoff
+Check ($volumeRow.observation_scope -ceq 'declared-path-drive' -and $volumeRow.target_volume_relationship -ceq 'unknown') 'Volume scope missing from minimized JSON.'
+Check ($volumeHtml.Contains('declared-path-drive') -and $volumeHtml.Contains('unknown')) 'Volume scope missing from HTML.'
+$unavailableVolume=New-IncidentHandoff -CoreReport $core -Context @{schema='boundary-incident/1'} -Observations @(@{kind='volume';provenance='local-query';status='unavailable';value=$null;observed_at=$null;error_code='VOLUME_UNAVAILABLE'})
+Check ($unavailableVolume.observations[0].observation_scope -ceq 'declared-path-drive' -and $unavailableVolume.observations[0].target_volume_relationship -ceq 'unknown' -and $null -eq $unavailableVolume.observations[0].value) 'Unavailable volume lost scope or fabricated a value.'
+Check ($html.Contains('<meta name="viewport" content="width=device-width, initial-scale=1">') -and $html.Contains('<main>') -and $html.Contains('</main>')) 'HTML lacks viewport or main landmark.'
+Check (($html -split 'role="region"').Count -eq 6 -and ($html -split 'tabindex="0"').Count -eq 6 -and ($html -split '<table').Count -eq 6) 'Five accessible table regions not retained.'
 
 $output = Join-Path ([IO.Path]::GetTempPath()) ('boundary-handoff-' + [guid]::NewGuid().ToString('N') + '.json')
 Write-IncidentHandoff -LiteralPath $output -Payload $json -InputPaths @($file) -InvestigatedPaths @($root)
