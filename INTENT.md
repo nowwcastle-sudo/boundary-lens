@@ -14,5 +14,5 @@ existing regression suites. A passing test is evidence for its scenario, not a
 universal runtime-enforcement or non-mutation guarantee.
 
 Design: docs/superpowers/specs/2026-09-20-local-completion-design.md.
-Direction selected; detailed written design awaits owner review. No new feature
+Owner approved the written design on 2026-09-20 ("설계 승인"). No new feature
 implementation or test result is claimed by this intent file.
