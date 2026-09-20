@@ -33,6 +33,10 @@ jobs:
             pwsh -NoProfile -File (Join-Path 'tests' $suite)
             if ($LASTEXITCODE -ne 0) { throw "Test suite failed: $suite" }
           }
+          foreach ($suite in @('incident-input.ps1','incident-observations.ps1','incident-handoff.ps1','incident-interface.ps1')) {
+            pwsh -NoProfile -File (Join-Path 'tests' $suite)
+            if ($LASTEXITCODE -ne 0) { throw "Incident suite failed: $suite" }
+          }
       - name: Verify native handle replacement and cleanup
         shell: pwsh
         run: |
@@ -59,15 +63,17 @@ jobs:
           $zip = Join-Path $releaseCheck 'boundary-lens-0.2.0-experimental.1.zip'
           $members = @(tar -tf $zip | Sort-Object)
           $tarExit = $LASTEXITCODE
-          if ($tarExit -ne 0 -or ($members -join ',') -cne 'BoundaryLens.ps1,LICENSE,README.md,SHA256SUMS.txt') { throw 'ZIP member allowlist differs.' }
+          if ($tarExit -ne 0 -or ($members -join ',') -cne 'BoundaryIncident.ps1,BoundaryLens.ps1,IncidentHandoff.psm1,IncidentInput.psm1,IncidentObservations.psm1,LICENSE,README.md,SHA256SUMS.txt') { throw 'ZIP member allowlist differs.' }
           pwsh -NoProfile -File tests/operational-ux.ps1 -ScriptPath (Join-Path $releaseCheck 'BoundaryLens.ps1')
           if ($LASTEXITCODE -ne 0) { throw 'Standalone process UX verification failed.' }
           $extracted = Join-Path $releaseCheck 'extracted-test-copy'
           Expand-Archive -LiteralPath $zip -DestinationPath $extracted -ErrorAction Stop
-          $expectedExtractedMembers = @('BoundaryLens.ps1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
+          $expectedExtractedMembers = @('BoundaryLens.ps1', 'BoundaryIncident.ps1', 'IncidentInput.psm1', 'IncidentObservations.psm1', 'IncidentHandoff.psm1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
           $actualExtractedMembers = @(Get-ChildItem -LiteralPath $extracted -File | ForEach-Object Name | Sort-Object)
           if (($actualExtractedMembers -join ',') -cne (($expectedExtractedMembers | Sort-Object) -join ',')) {
             throw 'ZIP extraction produced an incomplete or unexpected member set.'
           }
           pwsh -NoProfile -File tests/operational-ux.ps1 -ScriptPath (Join-Path $extracted 'BoundaryLens.ps1')
           if ($LASTEXITCODE -ne 0) { throw 'ZIP process UX verification failed.' }
+          pwsh -NoProfile -File tests/incident-interface.ps1 -ScriptPath (Join-Path $extracted 'BoundaryIncident.ps1')
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP companion process UX verification failed.' }

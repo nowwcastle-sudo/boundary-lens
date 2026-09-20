@@ -93,6 +93,8 @@ Set-Location -LiteralPath $boundaryCandidate
 
 결과에는 ZIP과 단독 실행용 스크립트가 포함되며 두 스크립트의 바이트는 같습니다. 아래 합성 예제로 첫 실행을 진행하세요. 빌드 시각과 README 바이트가 달라질 수 있으므로, 소스 빌드 결과를 다른 릴리스의 ZIP 해시와 비교하지 마세요.
 
+새 소스 빌드 후보 ZIP에는 `BoundaryLens.ps1`, `BoundaryIncident.ps1`, `IncidentInput.psm1`, `IncidentObservations.psm1`, `IncidentHandoff.psm1`, `LICENSE`, `README.md`, `SHA256SUMS.txt`가 정확히 들어갑니다. 이미 공개된 `v0.2.0-experimental.1` ZIP은 아래 검증 절차대로 4개 파일이며, 이번 소스 변경으로 그 파일이나 체크섬을 교체하지 않습니다.
+
 ## 합성 예제로 첫 실행
 
 검증한 스크립트가 있는 폴더에서 실행합니다. 아래 준비 명령은 새 연습 폴더와 파일 하나를 씁니다. 사용자가 준비하는 단계이며 읽기 전용 진단과 별개입니다. 기존 사건 데이터를 사용하지 않고, 도구가 실행 후 파일을 삭제하지도 않습니다.
@@ -158,6 +160,24 @@ $missingReport
 ```
 
 두 보고서에는 `RUNTIME_ENFORCEMENT_UNKNOWN`이 남아야 합니다. 정적 증거만으로 실행 중 권한 경계가 실제로 적용되는지 알 수 없습니다. 전체 JSON에는 경로와 환경 정보가 들어갈 수 있으므로 특히 `incident.workspace_input`, `incident.failed_path_input`, `incident.observed_at`을 확인하세요. 저장한 증거 원본은 보존하고, 공유가 승인되었다면 별도 사본에서 필요한 정보만 남긴 뒤 로컬에서 검토하세요. 위 명령은 보고서를 전송하지 않으며 공유해도 안전하다는 판정도 하지 않습니다.
+
+### 사건 전달본 만들기 (새 소스 빌드 후보 전용)
+
+위 절차로 저장한 `$existingReport`를 사용합니다. 동반 도구는 기존 JSON을 읽을 뿐, 진단기나 다른 제품을 자동 실행하지 않습니다. 후보 파일 8개는 같은 폴더에 두세요.
+
+```powershell
+$incidentPath = Join-Path $boundaryOutput ("incident-$([guid]::NewGuid().ToString('N')).json")
+if (Test-Path -LiteralPath $incidentPath) { throw 'Incident file already exists; stop.' }
+[IO.File]::WriteAllText($incidentPath, '{"schema":"boundary-incident/1","product":"synthetic example"}', [Text.UTF8Encoding]::new($false))
+$handoffPath = Join-Path $boundaryOutput ("handoff-$([guid]::NewGuid().ToString('N')).json")
+pwsh -NoProfile -NonInteractive -File .\BoundaryIncident.ps1 -CoreReport $existingReport -Incident $incidentPath -Output $handoffPath -Format Json
+$handoffExit = $LASTEXITCODE
+$handoffExit
+```
+
+로컬 `.json`·`.jsonl` 로그는 `-LogPath FILE`을 반복해서 지정할 수 있습니다. 자동 검색은 하지 않습니다. `-Format Html`을 쓰면 외부 자원과 스크립트가 없는 정적 HTML 파일을 만듭니다. 종료 코드 `0`은 요청한 전달본을 만들었고 추가 관측에 실패가 없다는 뜻, `1`은 수집·저장 실패 또는 불완전한 전달본 생성, `2`는 옵션·스키마·경로 거부입니다. 불완전한 파일이 만들어졌다면 그대로 보존하고 검토하세요. 출력은 조사 경로 밖의 새 로컬 파일이어야 하며 기존 파일을 덮어쓰지 않습니다.
+
+전달본은 알려진 결과·상태 코드, 경로 별칭, 자료 출처와 `UNKNOWN`을 남깁니다. 제품명·버전·오류 문자열·프로세스명·필터·런타임·로그 문자열은 원문 대신 사건 안에서만 쓰는 별칭으로 바꿉니다. 원문은 별도의 로컬 입력 파일에 남습니다. 따라서 기본 전달본만으로 제품을 알아볼 수 없는 손실이 있습니다. 전달본은 최소화본이지 익명본이 아닙니다. 시각과 파일시스템 크기 정보도 사건을 식별할 수 있고, 허용 목록 밖의 자유 입력 문자열은 비밀값이 없다고 보장할 수 없습니다. 공유하기 전에 실제 파일을 직접 확인하세요. 자세한 계약은 [로컬 사건 안내](docs/local-incident.md)를 참고하세요.
 
 ### 단독 스크립트
 

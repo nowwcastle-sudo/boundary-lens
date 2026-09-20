@@ -126,6 +126,13 @@ The result includes the ZIP and standalone script with identical script bytes.
 Follow the synthetic first use below. Do not compare a source build against a
 different release's archive hash; build timestamps and README bytes can differ.
 
+This **new source-build candidate** has exactly eight ZIP members:
+`BoundaryLens.ps1`, `BoundaryIncident.ps1`, `IncidentInput.psm1`,
+`IncidentObservations.psm1`, `IncidentHandoff.psm1`, `LICENSE`, `README.md`,
+and `SHA256SUMS.txt`. The published `v0.2.0-experimental.1` ZIP above still has
+four members. This source-build change does not replace that release or its
+checksums.
+
 ## First use with a synthetic example
 
 Stay in the directory containing the verified script. The following setup
@@ -220,6 +227,40 @@ The release ZIP includes BoundaryLens.ps1, LICENSE, README.md and SHA256SUMS.txt
 Do not reuse historical private-release filenames, hashes or three-member
 layouts. This repository starts with a new public history; private development
 records and artifacts are not part of its releases.
+
+## Make a minimized local handoff (source-build candidate only)
+
+Keep the eight candidate files together. First run the original diagnostic and
+save its full JSON as `$existingReport` with the guarded steps above. The
+companion reads that file; it does not run the diagnostic or another product.
+Create a separate incident file with only the fields you choose to supply:
+
+```powershell
+$incidentPath = Join-Path $boundaryOutput ("incident-$([guid]::NewGuid().ToString('N')).json")
+if (Test-Path -LiteralPath $incidentPath) { throw 'Incident file already exists; stop.' }
+[IO.File]::WriteAllText($incidentPath, '{"schema":"boundary-incident/1","product":"synthetic example"}', [Text.UTF8Encoding]::new($false))
+$handoffPath = Join-Path $boundaryOutput ("handoff-$([guid]::NewGuid().ToString('N')).json")
+pwsh -NoProfile -NonInteractive -File .\BoundaryIncident.ps1 -CoreReport $existingReport -Incident $incidentPath -Output $handoffPath -Format Json
+$handoffExit = $LASTEXITCODE
+$handoffExit
+```
+
+Use repeated `-LogPath FILE` pairs to select local `.json` or `.jsonl` logs;
+none are discovered automatically. `-Format Html` writes a static HTML file
+instead. Exit `0` means the requested handoff was written with no unavailable
+optional observation, `1` means collection/export failed or an incomplete
+handoff was written, and `2` means usage, schema or path rejection. An
+incomplete file, if present, remains for review. The destination must be a
+fresh local file outside investigated paths; existing files are never replaced.
+
+The handoff keeps known result/status codes, path labels, provenance and
+UNKNOWN. It replaces arbitrary product, version, error, process, filter,
+runtime and log strings with local aliases. Those raw strings stay only in
+your separate incident/core/log inputs. This is a deliberate loss of detail:
+the default shared handoff cannot identify a product from its alias. It is
+minimized, not anonymous; timestamps and filesystem size can identify a case.
+Review the actual file before sharing it. Generic strings cannot be guaranteed
+secret-free if copied outside this allowlist. See [local incident guide](docs/local-incident.md).
 
 ## How to read results
 
