@@ -52,22 +52,22 @@ Then read the result before saving or sharing anything. The download step uses
 the network to retrieve the ZIP from GitHub; the diagnostic has no report-upload
 feature. See the network-isolation limit under **How to read results**.
 
-These English and Korean files are repository documentation. They may be newer
-than the README inside the fixed `v0.2.0-experimental.1` ZIP. That release still
-contains four members and does not include `README.ko.md`; these documentation
-changes do not replace its script, archive or published checksums.
+These English and Korean files are repository documentation. The historical
+`v0.2.0-experimental.1` ZIP still has four members and no incident companion.
+The current `.2` ZIP has eight members. Neither ZIP includes `README.ko.md`;
+these documentation changes do not replace the older release or its checksums.
 
 ## Download the experimental release
 
-Release: [v0.2.0-experimental.1](https://github.com/nowwcastle-sudo/boundary-lens/releases/tag/v0.2.0-experimental.1).
+Release: [v0.2.0-experimental.2](https://github.com/nowwcastle-sudo/boundary-lens/releases/tag/v0.2.0-experimental.2).
 The public download does not require a GitHub account. In PowerShell 7:
 
 ```powershell
 $boundaryAssets = Join-Path ([IO.Path]::GetTempPath()) ('boundary-lens-download-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $boundaryAssets -ErrorAction Stop | Out-Null
-$boundaryRelease = 'https://github.com/nowwcastle-sudo/boundary-lens/releases/download/v0.2.0-experimental.1'
-$boundaryZip = Join-Path $boundaryAssets 'boundary-lens-0.2.0-experimental.1.zip'
-Invoke-WebRequest -Uri "$boundaryRelease/boundary-lens-0.2.0-experimental.1.zip" -OutFile $boundaryZip -ErrorAction Stop
+$boundaryRelease = 'https://github.com/nowwcastle-sudo/boundary-lens/releases/download/v0.2.0-experimental.2'
+$boundaryZip = Join-Path $boundaryAssets 'boundary-lens-0.2.0-experimental.2.zip'
+Invoke-WebRequest -Uri "$boundaryRelease/boundary-lens-0.2.0-experimental.2.zip" -OutFile $boundaryZip -ErrorAction Stop
 Get-FileHash -LiteralPath $boundaryZip -Algorithm SHA256
 ```
 
@@ -78,13 +78,14 @@ identifies bytes, not their safety.
 
 ## Verify and extract
 
-The archive has exactly four members: script, LICENSE, README and SHA256SUMS.
-Check the names before extraction, then check all three payload hashes:
+The archive has exactly eight members: the diagnostic, four incident companion
+files, LICENSE, README and SHA256SUMS. Check the names before extraction, then
+check all seven payload hashes:
 
 ```powershell
 $boundaryArchive = [IO.Compression.ZipFile]::OpenRead($boundaryZip)
 try {
-    $expectedMembers = @('BoundaryLens.ps1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
+    $expectedMembers = @('BoundaryLens.ps1', 'BoundaryIncident.ps1', 'IncidentInput.psm1', 'IncidentObservations.psm1', 'IncidentHandoff.psm1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
     $actualMembers = @($boundaryArchive.Entries | ForEach-Object FullName | Sort-Object)
     if (($actualMembers -join ',') -cne (($expectedMembers | Sort-Object) -join ',')) {
         throw 'Unexpected archive member set; preserve the ZIP and stop.'
@@ -95,10 +96,10 @@ if (Test-Path -LiteralPath $extractDir) { throw 'Extraction directory already ex
 New-Item -ItemType Directory -Path $extractDir -ErrorAction Stop | Out-Null
 Expand-Archive -LiteralPath $boundaryZip -DestinationPath $extractDir -ErrorAction Stop
 $sums = @(Get-Content -LiteralPath (Join-Path $extractDir 'SHA256SUMS.txt') -ErrorAction Stop)
-if ($sums.Count -ne 3) { throw 'Expected exactly three checksum entries.' }
+if ($sums.Count -ne 7) { throw 'Expected exactly seven checksum entries.' }
 $seenNames = @{}
 foreach ($line in $sums) {
-    if ($line -notmatch '^([A-Fa-f0-9]{64})  (BoundaryLens\.ps1|LICENSE|README\.md)$') { throw 'Unexpected checksum entry.' }
+    if ($line -notmatch '^([A-Fa-f0-9]{64})  (BoundaryLens\.ps1|BoundaryIncident\.ps1|IncidentInput\.psm1|IncidentObservations\.psm1|IncidentHandoff\.psm1|LICENSE|README\.md)$') { throw 'Unexpected checksum entry.' }
     $expected = $Matches[1]
     $name = $Matches[2]
     if ($seenNames.ContainsKey($name)) { throw 'Duplicate checksum entry.' }
@@ -125,6 +126,12 @@ Set-Location -LiteralPath $boundaryCandidate
 The result includes the ZIP and standalone script with identical script bytes.
 Follow the synthetic first use below. Do not compare a source build against a
 different release's archive hash; build timestamps and README bytes can differ.
+
+The current `.2` ZIP and a fresh source build have exactly eight ZIP members:
+`BoundaryLens.ps1`, `BoundaryIncident.ps1`, `IncidentInput.psm1`,
+`IncidentObservations.psm1`, `IncidentHandoff.psm1`, `LICENSE`, `README.md`,
+and `SHA256SUMS.txt`. The historical `v0.2.0-experimental.1` ZIP still has
+four members; its asset and checksum remain separate.
 
 ## First use with a synthetic example
 
@@ -220,6 +227,51 @@ The release ZIP includes BoundaryLens.ps1, LICENSE, README.md and SHA256SUMS.txt
 Do not reuse historical private-release filenames, hashes or three-member
 layouts. This repository starts with a new public history; private development
 records and artifacts are not part of its releases.
+
+## Make a minimized local handoff (.2 release or source build)
+
+Keep the eight package files together. First run the original diagnostic and
+save its full JSON as `$existingReport` with the guarded steps above. The
+companion reads that file; it does not run the diagnostic or another product.
+Create a separate incident file with only the fields you choose to supply:
+
+```powershell
+$incidentPath = Join-Path $boundaryOutput ("incident-$([guid]::NewGuid().ToString('N')).json")
+if (Test-Path -LiteralPath $incidentPath) { throw 'Incident file already exists; stop.' }
+[IO.File]::WriteAllText($incidentPath, '{"schema":"boundary-incident/1","product":"synthetic example"}', [Text.UTF8Encoding]::new($false))
+$handoffPath = Join-Path $boundaryOutput ("handoff-$([guid]::NewGuid().ToString('N')).json")
+pwsh -NoProfile -NonInteractive -File .\BoundaryIncident.ps1 -CoreReport $existingReport -Incident $incidentPath -Output $handoffPath -Format Json
+$handoffExit = $LASTEXITCODE
+$handoffExit
+```
+
+Use repeated `-LogPath FILE` pairs to select local `.json` or `.jsonl` logs;
+none are discovered automatically. `-Format Html` writes a static HTML file
+instead. Exit `0` means the requested handoff was written with no unavailable
+optional observation, `1` means collection/export failed or an incomplete
+handoff was written, and `2` means usage, schema or path rejection. An
+incomplete file, if present, remains for review. The destination must be a
+fresh local file outside investigated paths; existing files are never replaced.
+
+If the companion cannot establish the current physical workspace boundary, it
+refuses the export before creating a file. A missing failed target requires a
+verified existing parent directory. This can prevent a handoff for an
+unverified workspace; keep the original diagnostic JSON for investigation.
+
+The companion's volume query measures the drive named in the declared failed
+path (`observation_scope: declared-path-drive`). A junction or other path
+redirection can lead to a different target volume, whose relationship to that
+drive remains `unknown`. Neither the JSON nor HTML handoff claims to measure
+the resolved target volume; obtain separate target-volume evidence if needed.
+
+The handoff keeps known result/status codes, path labels, provenance and
+UNKNOWN. It replaces arbitrary product, version, error, process, filter,
+runtime and log strings with local aliases. Those raw strings stay only in
+your separate incident/core/log inputs. This is a deliberate loss of detail:
+the default shared handoff cannot identify a product from its alias. It is
+minimized, not anonymous; timestamps and filesystem size can identify a case.
+Review the actual file before sharing it. Generic strings cannot be guaranteed
+secret-free if copied outside this allowlist. See the [local incident guide](https://github.com/nowwcastle-sudo/boundary-lens/blob/main/docs/local-incident.md).
 
 ## How to read results
 

@@ -29,19 +29,19 @@ Windows x64에서 일반 사용자 권한으로 PowerShell 7(`pwsh`)을 여세�
 
 같은 PowerShell 창에서 **다운로드 → 검증·압축 해제 → 합성 예제로 첫 실행** 순서로 한 줄씩 실행하세요. 앞 단계의 변수를 다음 단계에서도 사용합니다. 저장소 복제본으로 패키지를 만들려는 경우에만 소스 빌드 절차를 선택하면 됩니다. 먼저 결과를 읽고 그다음 저장·공유 여부를 판단하세요. 다운로드 명령은 GitHub에 접속합니다. 진단 도구에는 보고서를 업로드하는 기능이 없지만, 네트워크 격리가 필요하면 아래 제한도 확인해야 합니다.
 
-영문과 한국어 README는 저장소 문서이며 고정 릴리스 `v0.2.0-experimental.1` ZIP 안의 README보다 최신일 수 있습니다. 그 ZIP에는 파일 4개가 들어 있으며 `README.ko.md`는 포함하지 않습니다. 이번 문서 변경으로 릴리스의 스크립트·압축 파일·공개 체크섬을 바꾸지 않습니다.
+영문과 한국어 README는 저장소 문서입니다. 이전 `v0.2.0-experimental.1` ZIP은 여전히 4개 파일이며 사건 동반 도구가 없습니다. 이번 `.2` ZIP은 8개 파일입니다. 두 ZIP 모두 `README.ko.md`는 포함하지 않으며, 이전 릴리스의 압축 파일과 체크섬은 그대로 둡니다.
 
 ## 실험 릴리스 다운로드
 
-릴리스: [v0.2.0-experimental.1](https://github.com/nowwcastle-sudo/boundary-lens/releases/tag/v0.2.0-experimental.1).
+릴리스: [v0.2.0-experimental.2](https://github.com/nowwcastle-sudo/boundary-lens/releases/tag/v0.2.0-experimental.2).
 GitHub 계정 없이 내려받을 수 있습니다. PowerShell 7에서 실행하세요.
 
 ```powershell
 $boundaryAssets = Join-Path ([IO.Path]::GetTempPath()) ('boundary-lens-download-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $boundaryAssets -ErrorAction Stop | Out-Null
-$boundaryRelease = 'https://github.com/nowwcastle-sudo/boundary-lens/releases/download/v0.2.0-experimental.1'
-$boundaryZip = Join-Path $boundaryAssets 'boundary-lens-0.2.0-experimental.1.zip'
-Invoke-WebRequest -Uri "$boundaryRelease/boundary-lens-0.2.0-experimental.1.zip" -OutFile $boundaryZip -ErrorAction Stop
+$boundaryRelease = 'https://github.com/nowwcastle-sudo/boundary-lens/releases/download/v0.2.0-experimental.2'
+$boundaryZip = Join-Path $boundaryAssets 'boundary-lens-0.2.0-experimental.2.zip'
+Invoke-WebRequest -Uri "$boundaryRelease/boundary-lens-0.2.0-experimental.2.zip" -OutFile $boundaryZip -ErrorAction Stop
 Get-FileHash -LiteralPath $boundaryZip -Algorithm SHA256
 ```
 
@@ -49,12 +49,12 @@ Get-FileHash -LiteralPath $boundaryZip -Algorithm SHA256
 
 ## 검증과 압축 해제
 
-압축 파일에는 스크립트, LICENSE, README, SHA256SUMS 파일이 정확히 4개 있어야 합니다. 먼저 파일명을 확인하고 압축을 푼 뒤, 체크섬 파일에 적힌 본문 파일 3개의 해시를 확인합니다.
+압축 파일에는 진단 스크립트, 사건 동반 도구 파일 4개, LICENSE, README, SHA256SUMS가 정확히 8개 있어야 합니다. 먼저 파일명을 확인하고 압축을 푼 뒤, 체크섬 파일에 적힌 본문 파일 7개의 해시를 확인합니다.
 
 ```powershell
 $boundaryArchive = [IO.Compression.ZipFile]::OpenRead($boundaryZip)
 try {
-    $expectedMembers = @('BoundaryLens.ps1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
+    $expectedMembers = @('BoundaryLens.ps1', 'BoundaryIncident.ps1', 'IncidentInput.psm1', 'IncidentObservations.psm1', 'IncidentHandoff.psm1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
     $actualMembers = @($boundaryArchive.Entries | ForEach-Object FullName | Sort-Object)
     if (($actualMembers -join ',') -cne (($expectedMembers | Sort-Object) -join ',')) {
         throw 'Unexpected archive member set; preserve the ZIP and stop.'
@@ -65,10 +65,10 @@ if (Test-Path -LiteralPath $extractDir) { throw 'Extraction directory already ex
 New-Item -ItemType Directory -Path $extractDir -ErrorAction Stop | Out-Null
 Expand-Archive -LiteralPath $boundaryZip -DestinationPath $extractDir -ErrorAction Stop
 $sums = @(Get-Content -LiteralPath (Join-Path $extractDir 'SHA256SUMS.txt') -ErrorAction Stop)
-if ($sums.Count -ne 3) { throw 'Expected exactly three checksum entries.' }
+if ($sums.Count -ne 7) { throw 'Expected exactly seven checksum entries.' }
 $seenNames = @{}
 foreach ($line in $sums) {
-    if ($line -notmatch '^([A-Fa-f0-9]{64})  (BoundaryLens\.ps1|LICENSE|README\.md)$') { throw 'Unexpected checksum entry.' }
+    if ($line -notmatch '^([A-Fa-f0-9]{64})  (BoundaryLens\.ps1|BoundaryIncident\.ps1|IncidentInput\.psm1|IncidentObservations\.psm1|IncidentHandoff\.psm1|LICENSE|README\.md)$') { throw 'Unexpected checksum entry.' }
     $expected = $Matches[1]
     $name = $Matches[2]
     if ($seenNames.ContainsKey($name)) { throw 'Duplicate checksum entry.' }
@@ -92,6 +92,8 @@ Set-Location -LiteralPath $boundaryCandidate
 ```
 
 결과에는 ZIP과 단독 실행용 스크립트가 포함되며 두 스크립트의 바이트는 같습니다. 아래 합성 예제로 첫 실행을 진행하세요. 빌드 시각과 README 바이트가 달라질 수 있으므로, 소스 빌드 결과를 다른 릴리스의 ZIP 해시와 비교하지 마세요.
+
+이번 `.2` ZIP과 새 소스 빌드 ZIP에는 `BoundaryLens.ps1`, `BoundaryIncident.ps1`, `IncidentInput.psm1`, `IncidentObservations.psm1`, `IncidentHandoff.psm1`, `LICENSE`, `README.md`, `SHA256SUMS.txt`가 정확히 들어갑니다. 이전 `v0.2.0-experimental.1` ZIP의 4개 파일과 체크섬은 그대로 보존합니다.
 
 ## 합성 예제로 첫 실행
 
@@ -158,6 +160,28 @@ $missingReport
 ```
 
 두 보고서에는 `RUNTIME_ENFORCEMENT_UNKNOWN`이 남아야 합니다. 정적 증거만으로 실행 중 권한 경계가 실제로 적용되는지 알 수 없습니다. 전체 JSON에는 경로와 환경 정보가 들어갈 수 있으므로 특히 `incident.workspace_input`, `incident.failed_path_input`, `incident.observed_at`을 확인하세요. 저장한 증거 원본은 보존하고, 공유가 승인되었다면 별도 사본에서 필요한 정보만 남긴 뒤 로컬에서 검토하세요. 위 명령은 보고서를 전송하지 않으며 공유해도 안전하다는 판정도 하지 않습니다.
+
+### 사건 전달본 만들기 (.2 릴리스 또는 소스 빌드)
+
+위 절차로 저장한 `$existingReport`를 사용합니다. 동반 도구는 기존 JSON만 읽고 진단기나 다른 제품을 자동으로 실행하지 않습니다. 패키지 파일 8개는 같은 폴더에 두세요.
+
+```powershell
+$incidentPath = Join-Path $boundaryOutput ("incident-$([guid]::NewGuid().ToString('N')).json")
+if (Test-Path -LiteralPath $incidentPath) { throw 'Incident file already exists; stop.' }
+[IO.File]::WriteAllText($incidentPath, '{"schema":"boundary-incident/1","product":"synthetic example"}', [Text.UTF8Encoding]::new($false))
+$handoffPath = Join-Path $boundaryOutput ("handoff-$([guid]::NewGuid().ToString('N')).json")
+pwsh -NoProfile -NonInteractive -File .\BoundaryIncident.ps1 -CoreReport $existingReport -Incident $incidentPath -Output $handoffPath -Format Json
+$handoffExit = $LASTEXITCODE
+$handoffExit
+```
+
+로컬 `.json`·`.jsonl` 로그는 `-LogPath FILE`을 반복해서 지정할 수 있습니다. 자동 검색은 하지 않습니다. `-Format Html`을 쓰면 외부 자원과 스크립트가 없는 정적 HTML 파일을 만듭니다. 종료 코드 `0`은 요청한 전달본을 만들었고 추가 관측에 실패가 없다는 뜻, `1`은 수집·저장 실패 또는 불완전한 전달본 생성, `2`는 옵션·스키마·경로 거부입니다. 불완전한 파일이 만들어졌다면 그대로 보존하고 검토하세요. 출력은 조사 경로 밖의 새 로컬 파일이어야 하며 기존 파일을 덮어쓰지 않습니다.
+
+현재 작업 폴더의 실제 경계를 확인할 수 없으면 파일을 만들기 전에 전달본 저장을 거부합니다. 접근에 실패한 대상이 없는 경우에는 가장 가까운 기존 상위 폴더를 확인할 수 있어야 합니다. 이 조건 때문에 전달본을 만들지 못할 수 있으므로, 원래 진단 JSON은 보존해 조사에 사용하세요.
+
+확장 기능의 볼륨 조회는 실패 경로에 **선언된 드라이브**만 측정합니다(`observation_scope: declared-path-drive`). 정션 등으로 실제 대상이 다른 볼륨에 있을 수 있으며, 두 볼륨의 관계는 `unknown`으로 남깁니다. JSON·HTML 전달본은 최종 대상 볼륨을 측정했다고 주장하지 않습니다. 필요하면 대상 볼륨 증거를 별도로 확보하세요.
+
+전달본은 알려진 결과·상태 코드, 경로 별칭, 자료 출처와 `UNKNOWN`을 남깁니다. 전달본에서는 제품명·버전·오류 문자열·프로세스명·필터·런타임·로그 문자열을 원문 대신 사건 안에서만 쓰는 별칭으로 바꿉니다. 원문은 별도의 로컬 입력 파일에 남습니다. 따라서 기본 전달본만으로 제품을 알아볼 수 없는 손실이 있습니다. 전달본은 최소화본이지 익명본이 아닙니다. 시각과 파일시스템 크기 정보도 사건을 식별할 수 있고, 허용 목록 밖의 자유 입력 문자열은 비밀값이 없다고 보장할 수 없습니다. 공유하기 전에 실제 파일을 직접 확인하세요. 자세한 계약은 [로컬 사건 안내](https://github.com/nowwcastle-sudo/boundary-lens/blob/main/docs/local-incident.md)를 참고하세요.
 
 ### 단독 스크립트
 

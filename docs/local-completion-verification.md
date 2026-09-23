@@ -1,0 +1,107 @@
+# Local incident completion evidence — 2026-09-20
+
+The table below records the first Task 3 commit. The review-fix evidence
+at the end supersedes its affected assertion counts and limitations.
+
+Scope: local Windows/PowerShell 7 checks on the source candidate. This is not a public-release, all-environment, runtime-enforcement, or network-isolation certificate. Task 1 and 2 implementation details are in their local SDD reports; this table uses the actual source tests and this task's rerun. Assertion counts are per script, not additive coverage claims for each row.
+
+| Requirement | Positive and negative case | Source | Executed command | Assertions / exit | Observed result |
+|---|---|---|---|---|---|
+| BL-L01 context | Valid incident schema and optional fields; malformed/duplicate/nonscalar and forged fields rejected | `src/IncidentInput.psm1`, `tests/incident-input.ps1` | `pwsh -NoProfile -File tests/incident-input.ps1` | 45 / 0 | Strict parser and real synthetic core accepted; invalid incident shapes rejected. |
+| BL-L02 selected process | Current PID observed with incident-time identity unconfirmed; missing, exited, changed/reused, denied doubles unavailable | `src/IncidentObservations.psm1`, `tests/incident-observations.ps1` | `pwsh -NoProfile -File tests/incident-observations.ps1` | 129 / 0 | Second fresh process object and null failure values checked. Actual enterprise denial was not verified. |
+| BL-L03 logs | Explicit JSON/JSONL, exact 10,000-record and 1 MiB bounds; malformed batch/overflow rejected, arbitrary message discarded | `src/IncidentInput.psm1`, `tests/incident-input.ps1`, `tests/incident-interface.ps1` | `pwsh -NoProfile -File tests/incident-input.ps1`; `pwsh -NoProfile -File tests/incident-interface.ps1` | 45 / 0; 13 / 0 | Repeated `-LogPath` pairs exported only aliased log metadata; malformed inputs produced no partial output. Deterministic concurrent changed-read proof remains open. |
+| BL-L04 volume/filter | Local volume metadata and operator-supplied filter; unready/unsupported/denied doubles unavailable, supplied `SAFE` not measured | `src/IncidentObservations.psm1`, `src/IncidentHandoff.psm1`, `tests/incident-observations.ps1`, `tests/incident-handoff.ps1` | `pwsh -NoProfile -File tests/incident-observations.ps1`; `pwsh -NoProfile -File tests/incident-handoff.ps1` | 129 / 0; 29 / 0 | Filter content aliased; forged supplied→observed handoff case first failed (exit 1), then passed after downgrade (exit 0). Actual denied volume was not verified. |
+| BL-L05 URI | Local/remote/invalid URI classification; remote value not fetched, relation unknown, forbidden named network/process APIs AST check | `src/IncidentObservations.psm1`, `tests/incident-observations.ps1` | `pwsh -NoProfile -File tests/incident-observations.ps1` | 129 / 0 | Syntax-only URI result and positive-control AST rule passed. This bounded static test does not prove process-wide network isolation. |
+| BL-L06 handoff | Synthetic full core, privacy sentinels, HTML encoding, no-clobber, hardlink/junction/inside-path rejection; component-boundary sibling allowed; unsupported flags exit 2, unavailable optional exit 1 | `src/IncidentHandoff.psm1`, `src/BoundaryIncident.ps1`, `tests/incident-handoff.ps1`, `tests/incident-interface.ps1` | `pwsh -NoProfile -File tests/incident-handoff.ps1`; `pwsh -NoProfile -File tests/incident-interface.ps1` | 29 / 0; 13 / 0 | Four-key envelope, `RUNTIME_ENFORCEMENT_UNKNOWN`, static HTML and unchanged synthetic original verified. Write-failure after opening was not forced; exclusive create's failure artifact remains a bounded design claim. |
+
+The 11 preexisting CI suites, native race (12 assertions), native review (2 + 183 assertions), original documented report handoff, candidate package, standalone core UX (26 cases), extracted core UX (26 cases), and extracted companion interface (13 assertions) passed locally with exit 0 after the README route fix. The old report-handoff run failed when an added example became a fifth code block in the historical four-block section; the final rerun passed. The source-built ZIP has eight members. The already published four-member ZIP and its checksum were not modified. Two-Windows remote CI is pending authorized branch publication. Unsupported filesystems, privileged namespace replacement, real denied environments, and whole-product network isolation remain unverified.
+
+## Review fix round 1
+
+Focused failing tests first showed three defects: a genuine junction workspace
+could place output in its real target, a locked valid input was reported as a
+path/resource error, and HTML had no readable summary/observation tables.
+After the fix, the source tests returned:
+
+| Script | Assertions | Exit | New positive and negative evidence |
+|---|---:|---:|---|
+| tests/incident-input.ps1 | 47 | 0 | Locked incident/core/log reads retain fixed IO failure; invalid/oversize input remains a distinct path/resource rejection. |
+| tests/incident-handoff.ps1 | 36 | 0 | Unverified or empty workspace fails before output creation; injected post-open write failure retains a one-byte partial artifact; separate HTML tables encode injected markup; private URI scheme becomes other. |
+| tests/incident-interface.ps1 | 20 | 0 | Genuine junction target output is rejected with INCIDENT_OUTPUT_INVALID/exit 2 and no file; outside alias and missing failed target with verified parent still export; locked core is INCIDENT_FILE_IO_FAILED/exit 1; invalid UNC remains exit 2. |
+
+The physical boundary check inspects local link targets, obtains the current
+parent-directory NT path through a read-only metadata handle, and compares
+component boundaries before exclusive creation. Saved core NT paths add
+exclusions but do not authenticate the report or current topology. Unknown or
+remote link targets are not followed. A privileged replacement race remains
+outside the guarantee. The earlier unforced write-failure limitation is
+superseded by the injected partial-artifact test; actual disk-full or denied
+write conditions were not exercised. The eight-member candidate package and
+extracted companion test also passed after the fix. Two-Windows remote CI and
+the Task 1 node/changed-read proof gaps remain open.
+
+## Review fix round 2
+
+The first HTML-table version displayed core evidence but omitted the
+core-summary result rows and each observation's observed-at time. Focused
+mutation tests changed only one minimized result's status/reason code or only
+one observation time: HTML did not change (handoff and interface exit 1 before
+the fix). The renderer now adds an encoded core-results status/reason-code
+table and an observed-at column. Null time appears as unavailable, and the
+page states that a cause-candidate is not a proved cause. The JSON projection
+and original core report are unchanged. Focused handoff and interface
+assertion counts and final package identity are recorded in the local Task 3
+SDD report; the parent owns the final whole-branch gate.
+
+## Consolidated final local check
+
+Runtime source: `ede1d958bb695f2e67427b709ac45b0f743ba15f`. This section
+supersedes the affected counts and open local proof gaps above, without
+discarding the earlier failures.
+
+| Check | Result | Scope |
+|---|---|---|
+| `tests/incident-input.ps1` | 52 assertions, exit 0 | Exact 100000/100001-node boundary and actual held-read timestamp change, with unchanged-read positive control. Not proof of every content/identity race. |
+| `tests/incident-observations.ps1` | 134 assertions, exit 0 | Process/URI/failure cases retained; volume explicitly means declared-path drive, with actual target relationship unknown. |
+| `tests/incident-handoff.ps1` | 68 assertions, exit 0 | All 23 fixed core codes preserved, private sentinel removed, volume scope retained, escaped static tables and output safety controls. |
+| `tests/incident-interface.ps1` | 21 assertions, exit 0 | Source CLI and extracted candidate each passed. |
+| Package, documentation, privacy and evidence-reference checks | Each exit 0 | Exact eight-member ZIP; original core unchanged. |
+| Chrome at 375px and desktop | No page-wide overflow; five named keyboard-scrollable table regions | Keyboard reached the last observation columns; scope and unknown target relationship were visible. |
+| axe 4.12.1 | 31 passes, 0 violations, 0 incomplete | The previous main-landmark findings were resolved; this is not universal accessibility certification. |
+
+Candidate ZIP SHA-256:
+`ADD25141D722B939867E7E89D1AF8F55222103BA8F8B3B7DD61336AF53EFA9FD`.
+The existing core Git blob remains
+`017e0b248861acd63958dc32fd4c054f94060c7a`. Its earlier complete local
+CI-equivalent run at `3059a78084fb257fc83391cedbce2ac18ea4e4c4` passed;
+unchanged core groups were not rerun for this companion-only fix. That run's
+transcripts preserved individual exits but omitted child stdout, which is
+retained separately as labelled tool-output transcription. Final affected
+checks above have direct stdout/stderr logs.
+
+The final independent scoped review marked all five findings addressed with
+no new Critical/Important breakage. A bounded static security diff scan of the
+four changed companion runtime files (`b8d9b0a..ede1d95`, scan
+`88c3c70d-39fd-4faf-be81-3ae4c4ab9ce5`) was sealed with zero reportable
+findings. Its canonical coverage is **partial**: compact four-file discovery
+accounting remains deferred. It did not re-audit the original core, prove
+runtime enforcement or certify all filesystem races. Remote CI, real enterprise
+environments and publication remain separate gates. The old published
+four-member ZIP is not this candidate and has not been replaced.
+
+## Experimental.2 public candidate checkpoint (2026-09-24)
+
+The original core blob remains `017e0b248861acd63958dc32fd4c054f94060c7a`.
+The version-preparation commit `27d1a6df984ab371648d80cc12834c49bc41432d`
+changes package naming, CI's package path and the English/Korean first-use
+contract, not the diagnostic or companion runtime. A fresh package from that
+commit had eight exact members and seven matching internal payload hashes;
+ZIP SHA-256 was `BD690203E72A408D1096084348DEBAE095BAB92C2292BE00042CF441882EBB85`.
+The README's literal verification/extraction block passed against that ZIP,
+and all 13 English/Korean PowerShell code-block pairs matched after newline
+normalization. The earlier `.1` asset remains a separate four-member release.
+
+PR #1's Windows 2022 and windows-latest CI both completed successfully at
+`27d1a6d` (run `35887595121`). The new `.2` GitHub release and anonymous
+download were not yet published at this checkpoint; their identity must be
+checked separately after publication.
