@@ -52,22 +52,22 @@ Then read the result before saving or sharing anything. The download step uses
 the network to retrieve the ZIP from GitHub; the diagnostic has no report-upload
 feature. See the network-isolation limit under **How to read results**.
 
-These English and Korean files are repository documentation. They may be newer
-than the README inside the fixed `v0.2.0-experimental.1` ZIP. That release still
-contains four members and does not include `README.ko.md`; these documentation
-changes do not replace its script, archive or published checksums.
+These English and Korean files are repository documentation. The historical
+`v0.2.0-experimental.1` ZIP still has four members and no incident companion.
+The current `.2` ZIP has eight members. Neither ZIP includes `README.ko.md`;
+these documentation changes do not replace the older release or its checksums.
 
 ## Download the experimental release
 
-Release: [v0.2.0-experimental.1](https://github.com/nowwcastle-sudo/boundary-lens/releases/tag/v0.2.0-experimental.1).
+Release: [v0.2.0-experimental.2](https://github.com/nowwcastle-sudo/boundary-lens/releases/tag/v0.2.0-experimental.2).
 The public download does not require a GitHub account. In PowerShell 7:
 
 ```powershell
 $boundaryAssets = Join-Path ([IO.Path]::GetTempPath()) ('boundary-lens-download-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $boundaryAssets -ErrorAction Stop | Out-Null
-$boundaryRelease = 'https://github.com/nowwcastle-sudo/boundary-lens/releases/download/v0.2.0-experimental.1'
-$boundaryZip = Join-Path $boundaryAssets 'boundary-lens-0.2.0-experimental.1.zip'
-Invoke-WebRequest -Uri "$boundaryRelease/boundary-lens-0.2.0-experimental.1.zip" -OutFile $boundaryZip -ErrorAction Stop
+$boundaryRelease = 'https://github.com/nowwcastle-sudo/boundary-lens/releases/download/v0.2.0-experimental.2'
+$boundaryZip = Join-Path $boundaryAssets 'boundary-lens-0.2.0-experimental.2.zip'
+Invoke-WebRequest -Uri "$boundaryRelease/boundary-lens-0.2.0-experimental.2.zip" -OutFile $boundaryZip -ErrorAction Stop
 Get-FileHash -LiteralPath $boundaryZip -Algorithm SHA256
 ```
 
@@ -78,13 +78,14 @@ identifies bytes, not their safety.
 
 ## Verify and extract
 
-The archive has exactly four members: script, LICENSE, README and SHA256SUMS.
-Check the names before extraction, then check all three payload hashes:
+The archive has exactly eight members: the diagnostic, four incident companion
+files, LICENSE, README and SHA256SUMS. Check the names before extraction, then
+check all seven payload hashes:
 
 ```powershell
 $boundaryArchive = [IO.Compression.ZipFile]::OpenRead($boundaryZip)
 try {
-    $expectedMembers = @('BoundaryLens.ps1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
+    $expectedMembers = @('BoundaryLens.ps1', 'BoundaryIncident.ps1', 'IncidentInput.psm1', 'IncidentObservations.psm1', 'IncidentHandoff.psm1', 'LICENSE', 'README.md', 'SHA256SUMS.txt')
     $actualMembers = @($boundaryArchive.Entries | ForEach-Object FullName | Sort-Object)
     if (($actualMembers -join ',') -cne (($expectedMembers | Sort-Object) -join ',')) {
         throw 'Unexpected archive member set; preserve the ZIP and stop.'
@@ -95,10 +96,10 @@ if (Test-Path -LiteralPath $extractDir) { throw 'Extraction directory already ex
 New-Item -ItemType Directory -Path $extractDir -ErrorAction Stop | Out-Null
 Expand-Archive -LiteralPath $boundaryZip -DestinationPath $extractDir -ErrorAction Stop
 $sums = @(Get-Content -LiteralPath (Join-Path $extractDir 'SHA256SUMS.txt') -ErrorAction Stop)
-if ($sums.Count -ne 3) { throw 'Expected exactly three checksum entries.' }
+if ($sums.Count -ne 7) { throw 'Expected exactly seven checksum entries.' }
 $seenNames = @{}
 foreach ($line in $sums) {
-    if ($line -notmatch '^([A-Fa-f0-9]{64})  (BoundaryLens\.ps1|LICENSE|README\.md)$') { throw 'Unexpected checksum entry.' }
+    if ($line -notmatch '^([A-Fa-f0-9]{64})  (BoundaryLens\.ps1|BoundaryIncident\.ps1|IncidentInput\.psm1|IncidentObservations\.psm1|IncidentHandoff\.psm1|LICENSE|README\.md)$') { throw 'Unexpected checksum entry.' }
     $expected = $Matches[1]
     $name = $Matches[2]
     if ($seenNames.ContainsKey($name)) { throw 'Duplicate checksum entry.' }
@@ -126,12 +127,11 @@ The result includes the ZIP and standalone script with identical script bytes.
 Follow the synthetic first use below. Do not compare a source build against a
 different release's archive hash; build timestamps and README bytes can differ.
 
-This **new source-build candidate** has exactly eight ZIP members:
+The current `.2` ZIP and a fresh source build have exactly eight ZIP members:
 `BoundaryLens.ps1`, `BoundaryIncident.ps1`, `IncidentInput.psm1`,
 `IncidentObservations.psm1`, `IncidentHandoff.psm1`, `LICENSE`, `README.md`,
-and `SHA256SUMS.txt`. The published `v0.2.0-experimental.1` ZIP above still has
-four members. This source-build change does not replace that release or its
-checksums.
+and `SHA256SUMS.txt`. The historical `v0.2.0-experimental.1` ZIP still has
+four members; its asset and checksum remain separate.
 
 ## First use with a synthetic example
 
@@ -228,9 +228,9 @@ Do not reuse historical private-release filenames, hashes or three-member
 layouts. This repository starts with a new public history; private development
 records and artifacts are not part of its releases.
 
-## Make a minimized local handoff (source-build candidate only)
+## Make a minimized local handoff (.2 release or source build)
 
-Keep the eight candidate files together. First run the original diagnostic and
+Keep the eight package files together. First run the original diagnostic and
 save its full JSON as `$existingReport` with the guarded steps above. The
 companion reads that file; it does not run the diagnostic or another product.
 Create a separate incident file with only the fields you choose to supply:

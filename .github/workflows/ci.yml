@@ -60,7 +60,7 @@ jobs:
           $releaseCheck = Join-Path ([IO.Path]::GetTempPath()) ('boundary-lens-package-ci-' + [guid]::NewGuid().ToString('N'))
           pwsh -NoProfile -File tests/package.ps1 -OutputDirectory $releaseCheck
           if ($LASTEXITCODE -ne 0) { throw 'Package verification failed.' }
-          $zip = Join-Path $releaseCheck 'boundary-lens-0.2.0-experimental.1.zip'
+          $zip = Join-Path $releaseCheck 'boundary-lens-0.2.0-experimental.2.zip'
           $members = @(tar -tf $zip | Sort-Object)
           $tarExit = $LASTEXITCODE
           if ($tarExit -ne 0 -or ($members -join ',') -cne 'BoundaryIncident.ps1,BoundaryLens.ps1,IncidentHandoff.psm1,IncidentInput.psm1,IncidentObservations.psm1,LICENSE,README.md,SHA256SUMS.txt') { throw 'ZIP member allowlist differs.' }

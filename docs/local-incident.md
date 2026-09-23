@@ -38,9 +38,9 @@ system do not establish the resolved target volume. The same scope and
 unknown relationship appear in the minimized JSON and HTML. Obtain separate
 target-volume evidence if that distinction matters to the incident.
 
-The companion consumes an explicitly saved `BoundaryLens.ps1 -Format Json` report. It does not run the original collector, another product, a URI request, or a repair. Keep the full core report and incident input locally. The published `v0.2.0-experimental.1` ZIP is unchanged and does not contain this companion.
+The companion consumes an explicitly saved `BoundaryLens.ps1 -Format Json` report. It does not run the original collector, another product, a URI request, or a repair. Keep the full core report and incident input locally. The historical `v0.2.0-experimental.1` ZIP is unchanged and does not contain this companion; the new `.2` package does.
 
-Run these lines in PowerShell 7 from a source-build candidate directory containing all five runtime files. `$existingReport` must be a full saved core JSON report produced by the original diagnostic. `$boundaryOutput` must be a separate local directory outside the investigated paths.
+Run these lines in PowerShell 7 from the verified `.2` package or a source-build directory containing all five runtime files. `$existingReport` must be a full saved core JSON report produced by the original diagnostic. `$boundaryOutput` must be a separate local directory outside the investigated paths.
 
 ```powershell
 $incidentPath = Join-Path $boundaryOutput ("incident-$([guid]::NewGuid().ToString('N')).json")
