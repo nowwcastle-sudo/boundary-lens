@@ -1,4 +1,4 @@
-# Local incident companion (source-build candidate)
+# Local incident companion (.2 release and source build)
 
 ## Physical output boundary and failure classification
 

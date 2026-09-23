@@ -88,3 +88,20 @@ accounting remains deferred. It did not re-audit the original core, prove
 runtime enforcement or certify all filesystem races. Remote CI, real enterprise
 environments and publication remain separate gates. The old published
 four-member ZIP is not this candidate and has not been replaced.
+
+## Experimental.2 public candidate checkpoint (2026-09-24)
+
+The original core blob remains `017e0b248861acd63958dc32fd4c054f94060c7a`.
+The version-preparation commit `27d1a6df984ab371648d80cc12834c49bc41432d`
+changes package naming, CI's package path and the English/Korean first-use
+contract, not the diagnostic or companion runtime. A fresh package from that
+commit had eight exact members and seven matching internal payload hashes;
+ZIP SHA-256 was `BD690203E72A408D1096084348DEBAE095BAB92C2292BE00042CF441882EBB85`.
+The README's literal verification/extraction block passed against that ZIP,
+and all 13 English/Korean PowerShell code-block pairs matched after newline
+normalization. The earlier `.1` asset remains a separate four-member release.
+
+PR #1's Windows 2022 and windows-latest CI both completed successfully at
+`27d1a6d` (run `35887595121`). The new `.2` GitHub release and anonymous
+download were not yet published at this checkpoint; their identity must be
+checked separately after publication.
