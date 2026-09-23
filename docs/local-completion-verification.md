@@ -52,3 +52,39 @@ page states that a cause-candidate is not a proved cause. The JSON projection
 and original core report are unchanged. Focused handoff and interface
 assertion counts and final package identity are recorded in the local Task 3
 SDD report; the parent owns the final whole-branch gate.
+
+## Consolidated final local check
+
+Runtime source: `ede1d958bb695f2e67427b709ac45b0f743ba15f`. This section
+supersedes the affected counts and open local proof gaps above, without
+discarding the earlier failures.
+
+| Check | Result | Scope |
+|---|---|---|
+| `tests/incident-input.ps1` | 52 assertions, exit 0 | Exact 100000/100001-node boundary and actual held-read timestamp change, with unchanged-read positive control. Not proof of every content/identity race. |
+| `tests/incident-observations.ps1` | 134 assertions, exit 0 | Process/URI/failure cases retained; volume explicitly means declared-path drive, with actual target relationship unknown. |
+| `tests/incident-handoff.ps1` | 68 assertions, exit 0 | All 23 fixed core codes preserved, private sentinel removed, volume scope retained, escaped static tables and output safety controls. |
+| `tests/incident-interface.ps1` | 21 assertions, exit 0 | Source CLI and extracted candidate each passed. |
+| Package, documentation, privacy and evidence-reference checks | Each exit 0 | Exact eight-member ZIP; original core unchanged. |
+| Chrome at 375px and desktop | No page-wide overflow; five named keyboard-scrollable table regions | Keyboard reached the last observation columns; scope and unknown target relationship were visible. |
+| axe 4.12.1 | 31 passes, 0 violations, 0 incomplete | The previous main-landmark findings were resolved; this is not universal accessibility certification. |
+
+Candidate ZIP SHA-256:
+`ADD25141D722B939867E7E89D1AF8F55222103BA8F8B3B7DD61336AF53EFA9FD`.
+The existing core Git blob remains
+`017e0b248861acd63958dc32fd4c054f94060c7a`. Its earlier complete local
+CI-equivalent run at `3059a78084fb257fc83391cedbce2ac18ea4e4c4` passed;
+unchanged core groups were not rerun for this companion-only fix. That run's
+transcripts preserved individual exits but omitted child stdout, which is
+retained separately as labelled tool-output transcription. Final affected
+checks above have direct stdout/stderr logs.
+
+The final independent scoped review marked all five findings addressed with
+no new Critical/Important breakage. A bounded static security diff scan of the
+four changed companion runtime files (`b8d9b0a..ede1d95`, scan
+`88c3c70d-39fd-4faf-be81-3ae4c4ab9ce5`) was sealed with zero reportable
+findings. Its canonical coverage is **partial**: compact four-file discovery
+accounting remains deferred. It did not re-audit the original core, prove
+runtime enforcement or certify all filesystem races. Remote CI, real enterprise
+environments and publication remain separate gates. The old published
+four-member ZIP is not this candidate and has not been replaced.
