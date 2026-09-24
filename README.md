@@ -223,10 +223,12 @@ Use the verified script directly. Keep LICENSE with redistributed copies.
 
 ### ZIP format
 
-The release ZIP includes BoundaryLens.ps1, LICENSE, README.md and SHA256SUMS.txt.
-Do not reuse historical private-release filenames, hashes or three-member
-layouts. This repository starts with a new public history; private development
-records and artifacts are not part of its releases.
+The current `.2` release ZIP contains the eight files listed under **Verify and
+extract**, including the incident companion. The historical `.1` ZIP contains
+four files and no incident companion. Use the checksum and member list for the
+specific release you downloaded. Do not reuse historical private-release
+filenames, hashes or layouts. This repository starts with a new public history;
+private development records and artifacts are not part of its releases.
 
 ## Make a minimized local handoff (.2 release or source build)
 
